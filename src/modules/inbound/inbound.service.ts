@@ -153,9 +153,15 @@ export class InboundService {
         throw new NotFoundException(`Line ${payload.lineId} not found in receipt`);
       }
 
-      const receiveQty = new Prisma.Decimal(
-        payload.receivedQty ?? new Prisma.Decimal(receiptLine.expectedQty).minus(receiptLine.receivedQty),
-      );
+      const pendingQty = new Prisma.Decimal(receiptLine.expectedQty).minus(receiptLine.receivedQty);
+      const receiveQty =
+        payload.receivedQty === undefined || payload.receivedQty === null
+          ? pendingQty
+          : new Prisma.Decimal(payload.receivedQty);
+
+      if (receiveQty.gt(pendingQty)) {
+        throw new BadRequestException('Received quantity exceeds pending quantity');
+      }
 
       if (receiveQty.lte(0)) {
         throw new BadRequestException('Received quantity must be greater than zero');
