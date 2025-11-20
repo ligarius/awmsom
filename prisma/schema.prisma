@@ -16,6 +16,19 @@ enum BatchStatus {
   UNDER_INVESTIGATION
 }
 
+enum CycleCountStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum AdjustmentType {
+  GAIN
+  LOSS
+  CORRECTION
+}
+
 enum StockStatus {
   AVAILABLE
   RESERVED
@@ -79,6 +92,8 @@ model Warehouse {
   locations Location[]
   inboundReceipts InboundReceipt[]
   movementHeaders MovementHeader[]
+  cycleCountTasks CycleCountTask[]
+  inventoryAdjustments InventoryAdjustment[]
 }
 
 model Location {
@@ -97,6 +112,8 @@ model Location {
   inventory Inventory[]
   movementLinesFrom MovementLine[] @relation("MovementFrom")
   movementLinesTo   MovementLine[] @relation("MovementTo")
+  cycleCountLines CycleCountLine[]
+  inventoryAdjustments InventoryAdjustment[]
 
   @@unique([warehouseId, code])
   @@index([code])
@@ -119,6 +136,8 @@ model Product {
   inventory  Inventory[]
   inboundReceiptLines InboundReceiptLine[]
   movementLines MovementLine[]
+  cycleCountLines CycleCountLine[]
+  inventoryAdjustments InventoryAdjustment[]
 }
 
 model Batch {
@@ -136,6 +155,8 @@ model Batch {
   inventory Inventory[]
   movementLines MovementLine[]
   inboundReceiptLines InboundReceiptLine[]
+  cycleCountLines CycleCountLine[]
+  inventoryAdjustments InventoryAdjustment[]
 
   @@index([productId, batchCode])
 }
@@ -156,6 +177,7 @@ model Inventory {
   product  Product  @relation(fields: [productId], references: [id])
   batch    Batch?   @relation(fields: [batchId], references: [id])
   location Location @relation(fields: [locationId], references: [id])
+  inventoryAdjustments InventoryAdjustment[]
 
   @@index([productId, batchId, locationId])
 }
@@ -210,6 +232,7 @@ model MovementHeader {
 
   warehouse Warehouse @relation(fields: [warehouseId], references: [id])
   lines     MovementLine[]
+  inventoryAdjustments InventoryAdjustment[]
 
   @@index([movementType, warehouseId, status])
 }
@@ -220,7 +243,7 @@ model MovementLine {
   productId        String
   batchId          String?
   fromLocationId   String?
-  toLocationId     String
+  toLocationId     String?
   quantity         Decimal  @db.Decimal(20, 4)
   uom              String
   createdAt        DateTime @default(now())
@@ -230,7 +253,75 @@ model MovementLine {
   product        Product        @relation(fields: [productId], references: [id])
   batch          Batch?         @relation(fields: [batchId], references: [id])
   fromLocation   Location?      @relation("MovementFrom", fields: [fromLocationId], references: [id])
-  toLocation     Location       @relation("MovementTo", fields: [toLocationId], references: [id])
+  toLocation     Location?      @relation("MovementTo", fields: [toLocationId], references: [id])
 
   @@index([movementHeaderId, productId, batchId])
+}
+
+model CycleCountTask {
+  id          String            @id @default(uuid())
+  warehouseId String
+  description String?
+  status      CycleCountStatus
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  createdBy   String?
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  warehouse Warehouse        @relation(fields: [warehouseId], references: [id])
+  lines     CycleCountLine[]
+
+  @@index([warehouseId, status])
+}
+
+model CycleCountLine {
+  id               String   @id @default(uuid())
+  cycleCountTaskId String
+  productId        String
+  batchId          String?
+  locationId       String
+  uom              String
+  expectedQty      Decimal  @db.Decimal(20, 4)
+  countedQty       Decimal? @db.Decimal(20, 4)
+  differenceQty    Decimal? @db.Decimal(20, 4)
+  countedAt        DateTime?
+  countedBy        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  cycleCountTask CycleCountTask @relation(fields: [cycleCountTaskId], references: [id])
+  product        Product        @relation(fields: [productId], references: [id])
+  batch          Batch?         @relation(fields: [batchId], references: [id])
+  location       Location       @relation(fields: [locationId], references: [id])
+
+  @@index([cycleCountTaskId, productId, locationId])
+}
+
+model InventoryAdjustment {
+  id               String         @id @default(uuid())
+  warehouseId      String
+  productId        String
+  batchId          String?
+  locationId       String
+  inventoryId      String?
+  movementHeaderId String?
+  adjustmentType   AdjustmentType
+  previousQty      Decimal        @db.Decimal(20, 4)
+  newQty           Decimal        @db.Decimal(20, 4)
+  differenceQty    Decimal        @db.Decimal(20, 4)
+  reason           String
+  reference        String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  createdBy        String?
+
+  warehouse Warehouse       @relation(fields: [warehouseId], references: [id])
+  product   Product         @relation(fields: [productId], references: [id])
+  batch     Batch?          @relation(fields: [batchId], references: [id])
+  location  Location        @relation(fields: [locationId], references: [id])
+  inventory Inventory?      @relation(fields: [inventoryId], references: [id])
+  movementHeader MovementHeader? @relation(fields: [movementHeaderId], references: [id])
+
+  @@index([warehouseId, productId, locationId, createdAt])
 }
