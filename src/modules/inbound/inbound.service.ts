@@ -214,6 +214,7 @@ export class InboundService {
 
         await this.inventoryService.increaseStock(
           {
+            warehouseId: receipt.warehouseId,
             productId: receiptLine.productId,
             batchId: batchId ?? undefined,
             locationId: destinationLocation.id,
