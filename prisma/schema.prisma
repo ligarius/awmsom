@@ -1,0 +1,172 @@
+// Prisma schema defining core WMS domain entities for Sprint 1
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum BatchStatus {
+  NORMAL
+  BLOCKED
+  RECALL
+  UNDER_INVESTIGATION
+}
+
+enum StockStatus {
+  AVAILABLE
+  RESERVED
+  PICKING
+  IN_TRANSIT_INTERNAL
+  QUARANTINE
+  SCRAP
+  BLOCKED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  roleId String?
+  role   Role?   @relation(fields: [roleId], references: [id])
+}
+
+model Role {
+  id    String  @id @default(uuid())
+  name  String  @unique
+  users User[]
+}
+
+model Warehouse {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  locations Location[]
+}
+
+model Location {
+  id          String   @id @default(uuid())
+  warehouseId String
+  code        String
+  description String?
+  zone        String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+  inventory Inventory[]
+  movementLinesFrom MovementLine[] @relation("MovementFrom")
+  movementLinesTo   MovementLine[] @relation("MovementTo")
+
+  @@unique([warehouseId, code])
+  @@index([code])
+}
+
+model Product {
+  id                 String   @id @default(uuid())
+  sku                String   @unique
+  name               String
+  requiresBatch      Boolean  @default(false)
+  requiresExpiryDate Boolean  @default(false)
+  defaultUom         String
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  batches    Batch[]
+  inventory  Inventory[]
+  receiptLines InboundReceiptLine[]
+  movementLines MovementLine[]
+}
+
+model Batch {
+  id         String      @id @default(uuid())
+  productId  String
+  batchCode  String
+  expiryDate DateTime?
+  status     BatchStatus @default(NORMAL)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  product   Product    @relation(fields: [productId], references: [id])
+  inventory Inventory[]
+
+  @@index([productId, batchCode])
+}
+
+model Inventory {
+  id         String      @id @default(uuid())
+  productId  String
+  batchId    String?
+  locationId String
+  quantity   Decimal     @db.Decimal(20, 4)
+  uom        String
+  stockStatus StockStatus @default(AVAILABLE)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  product  Product  @relation(fields: [productId], references: [id])
+  batch    Batch?   @relation(fields: [batchId], references: [id])
+  location Location @relation(fields: [locationId], references: [id])
+
+  @@index([productId, batchId, locationId])
+}
+
+model MovementHeader {
+  id          String        @id @default(uuid())
+  reference   String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  lines       MovementLine[]
+}
+
+model MovementLine {
+  id             String   @id @default(uuid())
+  movementId     String
+  productId      String
+  fromLocationId String?
+  toLocationId   String?
+  quantity       Decimal  @db.Decimal(20, 4)
+  uom            String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  movement   MovementHeader @relation(fields: [movementId], references: [id])
+  product    Product        @relation(fields: [productId], references: [id])
+  from       Location?      @relation("MovementFrom", fields: [fromLocationId], references: [id])
+  to         Location?      @relation("MovementTo", fields: [toLocationId], references: [id])
+}
+
+model InboundReceipt {
+  id        String               @id @default(uuid())
+  reference String?
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  lines     InboundReceiptLine[]
+}
+
+model InboundReceiptLine {
+  id         String          @id @default(uuid())
+  receiptId  String
+  productId  String
+  quantity   Decimal         @db.Decimal(20, 4)
+  uom        String
+  batchCode  String?
+  expiryDate DateTime?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  receipt InboundReceipt @relation(fields: [receiptId], references: [id])
+  product Product        @relation(fields: [productId], references: [id])
+}
