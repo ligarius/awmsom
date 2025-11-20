@@ -108,164 +108,171 @@ export class InboundService {
   }
 
   async confirmReceipt(id: string, dto: ConfirmInboundReceiptDto) {
-    const receipt = await this.prisma.inboundReceipt.findUnique({
-      where: { id },
-      include: {
-        lines: { include: { product: true } },
-        warehouse: true,
-      },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const receipt = await tx.inboundReceipt.findUnique({
+        where: { id },
+        include: {
+          lines: { include: { product: true } },
+          warehouse: true,
+        },
+      });
 
-    if (!receipt) {
-      throw new NotFoundException('Inbound receipt not found');
-    }
-
-    if (
-      receipt.status !== InboundReceiptStatus.DRAFT &&
-      receipt.status !== InboundReceiptStatus.PARTIALLY_RECEIVED
-    ) {
-      throw new BadRequestException('Receipt cannot be confirmed in its current status');
-    }
-
-    const destinationLocation = await this.prisma.location.findUnique({
-      where: { id: dto.toLocationId },
-    });
-
-    if (!destinationLocation) {
-      throw new NotFoundException('Destination location not found');
-    }
-
-    if (destinationLocation.warehouseId !== receipt.warehouseId) {
-      throw new BadRequestException('Destination location must be in the same warehouse');
-    }
-
-    const linePayloads: {
-      lineId: string;
-      receivedQty?: number;
-      batchCode?: string;
-      expiryDate?: string;
-    }[] = dto.lines ?? receipt.lines.map((line) => ({ lineId: line.id }));
-    const movementLines: Prisma.MovementLineCreateWithoutMovementHeaderInput[] = [];
-
-    for (const payload of linePayloads) {
-      const receiptLine = receipt.lines.find((line) => line.id === payload.lineId);
-      if (!receiptLine) {
-        throw new NotFoundException(`Line ${payload.lineId} not found in receipt`);
+      if (!receipt) {
+        throw new NotFoundException('Inbound receipt not found');
       }
 
-      const pendingQty = new Prisma.Decimal(receiptLine.expectedQty).minus(receiptLine.receivedQty);
-      const receiveQty =
-        payload.receivedQty === undefined || payload.receivedQty === null
-          ? pendingQty
-          : new Prisma.Decimal(payload.receivedQty);
-
-      if (receiveQty.gt(pendingQty)) {
-        throw new BadRequestException('Received quantity exceeds pending quantity');
+      if (
+        receipt.status !== InboundReceiptStatus.DRAFT &&
+        receipt.status !== InboundReceiptStatus.PARTIALLY_RECEIVED
+      ) {
+        throw new BadRequestException('Receipt cannot be confirmed in its current status');
       }
 
-      if (receiveQty.lte(0)) {
-        throw new BadRequestException('Received quantity must be greater than zero');
+      const destinationLocation = await tx.location.findUnique({
+        where: { id: dto.toLocationId },
+      });
+
+      if (!destinationLocation) {
+        throw new NotFoundException('Destination location not found');
       }
 
-      const batchCode = payload.batchCode ?? receiptLine.batchCode;
-      const expiryDate = payload.expiryDate
-        ? new Date(payload.expiryDate)
-        : receiptLine.expiryDate ?? undefined;
-
-      if (receiptLine.product.requiresBatch && !batchCode) {
-        throw new BadRequestException('Batch code is required for this product');
+      if (destinationLocation.warehouseId !== receipt.warehouseId) {
+        throw new BadRequestException('Destination location must be in the same warehouse');
       }
 
-      if (receiptLine.product.requiresExpiryDate && !expiryDate) {
-        throw new BadRequestException('Expiry date is required for this product');
-      }
+      const linePayloads: {
+        lineId: string;
+        receivedQty?: number;
+        batchCode?: string;
+        expiryDate?: string;
+      }[] = dto.lines ?? receipt.lines.map((line) => ({ lineId: line.id }));
 
-      let batchId: string | null = null;
-      if (receiptLine.product.requiresBatch) {
-        const existingBatch = await this.prisma.batch.findFirst({
-          where: { productId: receiptLine.productId, batchCode: batchCode as string },
+      const movementLines: Prisma.MovementLineCreateWithoutMovementHeaderInput[] = [];
+
+      for (const payload of linePayloads) {
+        const receiptLine = receipt.lines.find((line) => line.id === payload.lineId);
+        if (!receiptLine) {
+          throw new NotFoundException(`Line ${payload.lineId} not found in receipt`);
+        }
+
+        const pendingQty = new Prisma.Decimal(receiptLine.expectedQty).minus(receiptLine.receivedQty);
+        const receiveQty =
+          payload.receivedQty === undefined || payload.receivedQty === null
+            ? pendingQty
+            : new Prisma.Decimal(payload.receivedQty);
+
+        if (receiveQty.gt(pendingQty)) {
+          throw new BadRequestException('Received quantity exceeds pending quantity');
+        }
+
+        if (receiveQty.lte(0)) {
+          throw new BadRequestException('Received quantity must be greater than zero');
+        }
+
+        const batchCode = payload.batchCode ?? receiptLine.batchCode;
+        const expiryDate = payload.expiryDate
+          ? new Date(payload.expiryDate)
+          : receiptLine.expiryDate ?? undefined;
+
+        if (receiptLine.product.requiresBatch && !batchCode) {
+          throw new BadRequestException('Batch code is required for this product');
+        }
+
+        if (receiptLine.product.requiresExpiryDate && !expiryDate) {
+          throw new BadRequestException('Expiry date is required for this product');
+        }
+
+        let batchId: string | null = null;
+        if (receiptLine.product.requiresBatch) {
+          const existingBatch = await tx.batch.findFirst({
+            where: { productId: receiptLine.productId, batchCode: batchCode as string },
+          });
+
+          if (existingBatch) {
+            batchId = existingBatch.id;
+          } else {
+            const createdBatch = await tx.batch.create({
+              data: {
+                productId: receiptLine.productId,
+                batchCode: batchCode as string,
+                expiryDate,
+              },
+            });
+            batchId = createdBatch.id;
+          }
+        }
+
+        await tx.inboundReceiptLine.update({
+          where: { id: receiptLine.id },
+          data: {
+            receivedQty: new Prisma.Decimal(receiptLine.receivedQty).plus(receiveQty),
+            batchCode,
+            expiryDate,
+            batchId: batchId ?? undefined,
+          },
         });
 
-        if (existingBatch) {
-          batchId = existingBatch.id;
-        } else {
-          const createdBatch = await this.prisma.batch.create({
-            data: {
-              productId: receiptLine.productId,
-              batchCode: batchCode as string,
-              expiryDate,
-            },
-          });
-          batchId = createdBatch.id;
-        }
+        await this.inventoryService.increaseStock(
+          {
+            productId: receiptLine.productId,
+            batchId: batchId ?? undefined,
+            locationId: destinationLocation.id,
+            quantity: receiveQty,
+            uom: receiptLine.uom,
+            stockStatus: StockStatus.AVAILABLE,
+          },
+          tx,
+        );
+
+        movementLines.push({
+          product: { connect: { id: receiptLine.productId } },
+          batch: batchId ? { connect: { id: batchId } } : undefined,
+          fromLocation: undefined,
+          toLocation: { connect: { id: destinationLocation.id } },
+          quantity: receiveQty,
+          uom: receiptLine.uom,
+        });
       }
 
-      await this.prisma.inboundReceiptLine.update({
-        where: { id: receiptLine.id },
+      const updatedLines = await tx.inboundReceiptLine.findMany({
+        where: { inboundReceiptId: receipt.id },
+      });
+
+      const allReceived = updatedLines.every((line) =>
+        new Prisma.Decimal(line.receivedQty).gte(line.expectedQty),
+      );
+
+      const newStatus = allReceived
+        ? InboundReceiptStatus.RECEIVED
+        : InboundReceiptStatus.PARTIALLY_RECEIVED;
+
+      const movementHeader = await tx.movementHeader.create({
         data: {
-          receivedQty: new Prisma.Decimal(receiptLine.receivedQty).plus(receiveQty),
-          batchCode,
-          expiryDate,
-          batchId: batchId ?? undefined,
+          movementType: MovementType.INBOUND_RECEIPT,
+          warehouseId: receipt.warehouseId,
+          reference: receipt.id,
+          status: MovementStatus.COMPLETED,
+          lines: {
+            create: movementLines,
+          },
+        },
+        include: { lines: true },
+      });
+
+      await tx.inboundReceipt.update({
+        where: { id: receipt.id },
+        data: {
+          status: newStatus,
+          receivedAt:
+            newStatus === InboundReceiptStatus.RECEIVED ? new Date() : receipt.receivedAt,
         },
       });
 
-      await this.inventoryService.increaseStock({
-        productId: receiptLine.productId,
-        batchId: batchId ?? undefined,
-        locationId: destinationLocation.id,
-        quantity: receiveQty,
-        uom: receiptLine.uom,
-        stockStatus: StockStatus.AVAILABLE,
-      });
-
-      movementLines.push({
-        product: { connect: { id: receiptLine.productId } },
-        batch: batchId ? { connect: { id: batchId } } : undefined,
-        fromLocation: undefined,
-        toLocation: { connect: { id: destinationLocation.id } },
-        quantity: receiveQty,
-        uom: receiptLine.uom,
-      });
-    }
-
-    const updatedLines = await this.prisma.inboundReceiptLine.findMany({
-      where: { inboundReceiptId: receipt.id },
-    });
-
-    const allReceived = updatedLines.every((line) =>
-      new Prisma.Decimal(line.receivedQty).gte(line.expectedQty),
-    );
-
-    const newStatus = allReceived
-      ? InboundReceiptStatus.RECEIVED
-      : InboundReceiptStatus.PARTIALLY_RECEIVED;
-
-    await this.prisma.inboundReceipt.update({
-      where: { id: receipt.id },
-      data: {
+      return {
+        receiptId: receipt.id,
         status: newStatus,
-        receivedAt: newStatus === InboundReceiptStatus.RECEIVED ? new Date() : receipt.receivedAt,
-      },
+        movement: movementHeader,
+      };
     });
-
-    const movementHeader = await this.prisma.movementHeader.create({
-      data: {
-        movementType: MovementType.INBOUND_RECEIPT,
-        warehouseId: receipt.warehouseId,
-        reference: receipt.id,
-        status: MovementStatus.COMPLETED,
-        lines: {
-          create: movementLines,
-        },
-      },
-      include: { lines: true },
-    });
-
-    return {
-      receiptId: receipt.id,
-      status: newStatus,
-      movement: movementHeader,
-    };
   }
 }
