@@ -127,6 +127,7 @@ describe('InboundService', () => {
 
     expect(inventoryService.increaseStock).toHaveBeenCalledWith(
       expect.objectContaining({
+        warehouseId: 'wh-1',
         productId: 'prod-1',
         batchId: undefined,
         locationId: 'loc-1',
@@ -268,7 +269,7 @@ describe('InboundService', () => {
     ).rejects.toThrow('movement failure');
 
     expect(inventoryService.increaseStock).toHaveBeenCalledWith(
-      expect.objectContaining({ productId: 'prod-3' }),
+      expect.objectContaining({ productId: 'prod-3', warehouseId: 'wh-1' }),
       tx,
     );
     expect(tx.inboundReceipt.update).not.toHaveBeenCalled();
