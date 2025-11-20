@@ -1,9 +1,19 @@
 import { Module } from '@nestjs/common';
+import { PrismaModule } from '../../prisma/prisma.module';
 import { WarehousesController } from './warehouses.controller';
-import { WarehousesService } from './warehouses.service';
+import { WarehouseApplicationService } from './application/services/warehouse.application-service';
+import { PrismaWarehouseRepository } from './infrastructure/persistence/prisma-warehouse.repository';
 
 @Module({
+  imports: [PrismaModule],
   controllers: [WarehousesController],
-  providers: [WarehousesService],
+  providers: [
+    PrismaWarehouseRepository,
+    {
+      provide: 'WarehouseRepository',
+      useExisting: PrismaWarehouseRepository,
+    },
+    WarehouseApplicationService,
+  ],
 })
 export class WarehousesModule {}
