@@ -21,7 +21,11 @@ export class InboundController {
         uom: line.uom,
         batchCode: line.batchCode,
         expiryDate: line.expiryDate ? new Date(line.expiryDate) : undefined,
+        createdBy: line.createdBy,
+        updatedBy: line.updatedBy,
       })),
+      createdBy: dto.createdBy,
+      updatedBy: dto.updatedBy,
     });
     return receipt;
   }
@@ -36,6 +40,8 @@ export class InboundController {
       fromLocationId: dto.fromLocationId,
       batchCode: dto.batchCode,
       expiryDate: dto.expiryDate ? new Date(dto.expiryDate) : undefined,
+      createdBy: dto.createdBy,
+      updatedBy: dto.updatedBy,
     });
     return movement;
   }
