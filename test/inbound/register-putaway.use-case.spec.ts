@@ -22,6 +22,10 @@ const movementRepo: PutawayMovementRepository = {
 };
 
 describe('RegisterPutawayUseCase', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('rechaza movimientos sin caducidad cuando el producto lo requiere', async () => {
     const useCase = new RegisterPutawayUseCase(productRepo, receiptRepo, movementRepo);
 
@@ -47,5 +51,26 @@ describe('RegisterPutawayUseCase', () => {
         expiryDate: new Date('2024-12-31'),
       }),
     ).rejects.toThrow('Debe ubicarse primero el lote con caducidad más próxima (FEFO)');
+  });
+
+  it('propaga lote y caducidad al repositorio', async () => {
+    const createSpy = jest.fn(async (movement) => movement);
+    const useCase = new RegisterPutawayUseCase(productRepo, receiptRepo, { create: createSpy });
+
+    const expiryDate = new Date('2023-12-31');
+    const result = await useCase.execute({
+      productId: 'prod-1',
+      quantity: 1,
+      toLocationId: 'loc-1',
+      batchCode: 'B1',
+      expiryDate,
+    });
+
+    expect(createSpy).toHaveBeenCalled();
+    const [movement] = createSpy.mock.calls[0];
+    expect(movement.batchCode).toBe('B1');
+    expect(movement.expiryDate).toEqual(expiryDate);
+    expect(result.batchCode).toBe('B1');
+    expect(result.expiryDate).toEqual(expiryDate);
   });
 });
