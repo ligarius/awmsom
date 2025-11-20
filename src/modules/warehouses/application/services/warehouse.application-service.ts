@@ -46,7 +46,11 @@ export class WarehouseApplicationService {
       throw new WarehouseNotFoundError();
     }
 
-    if (command.name === undefined && command.isActive === undefined) {
+    if (
+      command.name === undefined &&
+      command.isActive === undefined &&
+      command.updatedBy === undefined
+    ) {
       return existing;
     }
 
