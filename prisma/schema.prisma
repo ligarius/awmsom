@@ -151,6 +151,8 @@ model MovementLine {
   id             String   @id @default(uuid())
   movementId     String
   productId      String
+  batchCode      String?
+  expiryDate     DateTime?
   fromLocationId String?
   toLocationId   String?
   quantity       Decimal  @db.Decimal(20, 4)
