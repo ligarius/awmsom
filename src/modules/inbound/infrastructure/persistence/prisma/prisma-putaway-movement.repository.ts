@@ -18,6 +18,8 @@ export class PrismaPutawayMovementRepository implements PutawayMovementRepositor
         lines: {
           create: {
             productId: movement.productId,
+            batchCode: movement.batchCode,
+            expiryDate: movement.expiryDate,
             fromLocationId: movement.fromLocationId,
             toLocationId: movement.toLocationId,
             quantity: new Decimal(movement.quantity),
@@ -37,8 +39,8 @@ export class PrismaPutawayMovementRepository implements PutawayMovementRepositor
       line.uom,
       line.toLocationId ?? '',
       line.fromLocationId ?? undefined,
-      movement.batchCode,
-      movement.expiryDate,
+      line.batchCode ?? undefined,
+      line.expiryDate ?? undefined,
       line.id,
       line.createdAt,
       line.updatedAt,
