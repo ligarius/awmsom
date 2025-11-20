@@ -1,4 +1,4 @@
-// Prisma schema defining core WMS domain entities for Sprint 1
+// Prisma schema defining core WMS domain entities for Sprint 2 inbound flows
 
 generator client {
   provider = "prisma-client-js"
@@ -24,6 +24,25 @@ enum StockStatus {
   QUARANTINE
   SCRAP
   BLOCKED
+}
+
+enum InboundReceiptStatus {
+  DRAFT
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+enum MovementType {
+  INBOUND_RECEIPT
+  INTERNAL_TRANSFER
+  ADJUSTMENT
+}
+
+enum MovementStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
 }
 
 model User {
@@ -58,6 +77,8 @@ model Warehouse {
   createdBy String?
   updatedBy String?
   locations Location[]
+  inboundReceipts InboundReceipt[]
+  movementHeaders MovementHeader[]
 }
 
 model Location {
@@ -96,7 +117,7 @@ model Product {
 
   batches    Batch[]
   inventory  Inventory[]
-  receiptLines InboundReceiptLine[]
+  inboundReceiptLines InboundReceiptLine[]
   movementLines MovementLine[]
 }
 
@@ -113,22 +134,24 @@ model Batch {
 
   product   Product    @relation(fields: [productId], references: [id])
   inventory Inventory[]
+  movementLines MovementLine[]
+  inboundReceiptLines InboundReceiptLine[]
 
   @@index([productId, batchCode])
 }
 
 model Inventory {
-  id         String      @id @default(uuid())
-  productId  String
-  batchId    String?
-  locationId String
-  quantity   Decimal     @db.Decimal(20, 4)
-  uom        String
+  id          String      @id @default(uuid())
+  productId   String
+  batchId     String?
+  locationId  String
+  quantity    Decimal     @db.Decimal(20, 4)
+  uom         String
   stockStatus StockStatus @default(AVAILABLE)
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-  createdBy  String?
-  updatedBy  String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  createdBy   String?
+  updatedBy   String?
 
   product  Product  @relation(fields: [productId], references: [id])
   batch    Batch?   @relation(fields: [batchId], references: [id])
@@ -137,60 +160,77 @@ model Inventory {
   @@index([productId, batchId, locationId])
 }
 
-model MovementHeader {
-  id          String        @id @default(uuid())
-  reference   String?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+model InboundReceipt {
+  id          String               @id @default(uuid())
+  warehouseId String
+  externalRef String?
+  status      InboundReceiptStatus
+  receivedAt  DateTime?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
   createdBy   String?
   updatedBy   String?
-  lines       MovementLine[]
-}
 
-model MovementLine {
-  id             String   @id @default(uuid())
-  movementId     String
-  productId      String
-  batchCode      String?
-  expiryDate     DateTime?
-  fromLocationId String?
-  toLocationId   String?
-  quantity       Decimal  @db.Decimal(20, 4)
-  uom            String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  createdBy      String?
-  updatedBy      String?
-
-  movement   MovementHeader @relation(fields: [movementId], references: [id])
-  product    Product        @relation(fields: [productId], references: [id])
-  from       Location?      @relation("MovementFrom", fields: [fromLocationId], references: [id])
-  to         Location?      @relation("MovementTo", fields: [toLocationId], references: [id])
-}
-
-model InboundReceipt {
-  id        String               @id @default(uuid())
-  reference String?
-  createdAt DateTime             @default(now())
-  updatedAt DateTime             @updatedAt
-  createdBy String?
-  updatedBy String?
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
   lines     InboundReceiptLine[]
+
+  @@index([warehouseId, status])
 }
 
 model InboundReceiptLine {
-  id         String          @id @default(uuid())
-  receiptId  String
-  productId  String
-  quantity   Decimal         @db.Decimal(20, 4)
-  uom        String
-  batchCode  String?
-  expiryDate DateTime?
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
-  createdBy  String?
-  updatedBy  String?
+  id                     String      @id @default(uuid())
+  inboundReceiptId       String
+  productId              String
+  expectedQty            Decimal     @db.Decimal(20, 4)
+  receivedQty            Decimal     @db.Decimal(20, 4) @default(0)
+  uom                    String
+  batchCode              String?
+  expiryDate             DateTime?
+  sourceDocumentLineRef  String?
+  batchId                String?
+  createdAt              DateTime    @default(now())
+  updatedAt              DateTime    @updatedAt
 
-  receipt InboundReceipt @relation(fields: [receiptId], references: [id])
-  product Product        @relation(fields: [productId], references: [id])
+  inboundReceipt InboundReceipt @relation(fields: [inboundReceiptId], references: [id])
+  product        Product        @relation(fields: [productId], references: [id])
+  batch          Batch?         @relation(fields: [batchId], references: [id])
+
+  @@index([inboundReceiptId, productId])
+}
+
+model MovementHeader {
+  id           String         @id @default(uuid())
+  movementType MovementType
+  warehouseId  String
+  reference    String?
+  status       MovementStatus
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  createdBy    String?
+
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+  lines     MovementLine[]
+
+  @@index([movementType, warehouseId, status])
+}
+
+model MovementLine {
+  id               String   @id @default(uuid())
+  movementHeaderId String
+  productId        String
+  batchId          String?
+  fromLocationId   String?
+  toLocationId     String
+  quantity         Decimal  @db.Decimal(20, 4)
+  uom              String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  movementHeader MovementHeader @relation(fields: [movementHeaderId], references: [id])
+  product        Product        @relation(fields: [productId], references: [id])
+  batch          Batch?         @relation(fields: [batchId], references: [id])
+  fromLocation   Location?      @relation("MovementFrom", fields: [fromLocationId], references: [id])
+  toLocation     Location       @relation("MovementTo", fields: [toLocationId], references: [id])
+
+  @@index([movementHeaderId, productId, batchId])
 }
