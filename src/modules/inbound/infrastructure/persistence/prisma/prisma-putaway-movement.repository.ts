@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { PrismaService } from '../../../../prisma/prisma.service';
-import { PutawayMovement } from '../../domain/entities/putaway-movement.entity';
-import { PutawayMovementRepository } from '../../domain/repositories/putaway-movement.repository';
+import { PrismaService } from '../../../../../prisma/prisma.service';
+import { PutawayMovement } from '../../../domain/entities/putaway-movement.entity';
+import { PutawayMovementRepository } from '../../../domain/repositories/putaway-movement.repository';
+import { Decimal } from '@prisma/client/runtime/library';
 
 @Injectable()
 export class PrismaPutawayMovementRepository implements PutawayMovementRepository {
@@ -12,13 +13,17 @@ export class PrismaPutawayMovementRepository implements PutawayMovementRepositor
     const created = await this.prisma.movementHeader.create({
       data: {
         reference: 'PUTAWAY',
+        createdBy: movement.createdBy,
+        updatedBy: movement.updatedBy,
         lines: {
           create: {
             productId: movement.productId,
             fromLocationId: movement.fromLocationId,
             toLocationId: movement.toLocationId,
-            quantity: new Prisma.Decimal(movement.quantity),
+            quantity: new Decimal(movement.quantity),
             uom: movement.uom,
+            createdBy: movement.createdBy,
+            updatedBy: movement.updatedBy,
           },
         },
       },
@@ -35,6 +40,10 @@ export class PrismaPutawayMovementRepository implements PutawayMovementRepositor
       movement.batchCode,
       movement.expiryDate,
       line.id,
+      line.createdAt,
+      line.updatedAt,
+      line.createdBy ?? undefined,
+      line.updatedBy ?? undefined,
     );
   }
 }

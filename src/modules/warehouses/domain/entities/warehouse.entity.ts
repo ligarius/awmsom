@@ -6,5 +6,7 @@ export class Warehouse {
     public isActive: boolean,
     public readonly createdAt: Date,
     public readonly updatedAt: Date,
+    public readonly createdBy?: string,
+    public readonly updatedBy?: string,
   ) {}
 }

@@ -21,7 +21,11 @@ export class CreateInboundReceiptUseCase {
       uom?: string;
       batchCode?: string;
       expiryDate?: Date;
+      createdBy?: string;
+      updatedBy?: string;
     }[];
+    createdBy?: string;
+    updatedBy?: string;
   }): Promise<InboundReceipt> {
     const lines = await Promise.all(
       input.lines.map(async (line) => {
@@ -46,11 +50,24 @@ export class CreateInboundReceiptUseCase {
           uom,
           line.batchCode,
           line.expiryDate,
+          undefined,
+          undefined,
+          undefined,
+          line.createdBy,
+          line.updatedBy,
         );
       }),
     );
 
-    const receipt = new InboundReceipt(input.reference, lines);
+    const receipt = new InboundReceipt(
+      input.reference,
+      lines,
+      undefined,
+      undefined,
+      undefined,
+      input.createdBy,
+      input.updatedBy,
+    );
     return this.receiptRepo.create(receipt);
   }
 }

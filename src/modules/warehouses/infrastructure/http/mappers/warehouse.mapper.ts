@@ -9,6 +9,8 @@ export class WarehouseHttpMapper {
       isActive: warehouse.isActive,
       createdAt: warehouse.createdAt,
       updatedAt: warehouse.updatedAt,
+      createdBy: warehouse.createdBy,
+      updatedBy: warehouse.updatedBy,
     };
   }
 }

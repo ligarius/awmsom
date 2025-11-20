@@ -23,6 +23,8 @@ export class RegisterPutawayUseCase {
     fromLocationId?: string;
     batchCode?: string;
     expiryDate?: Date;
+    createdBy?: string;
+    updatedBy?: string;
   }): Promise<PutawayMovement> {
     const product = await this.productRepo.findById(input.productId);
     if (!product) {
@@ -52,6 +54,11 @@ export class RegisterPutawayUseCase {
       input.fromLocationId,
       input.batchCode,
       input.expiryDate,
+      undefined,
+      undefined,
+      undefined,
+      input.createdBy,
+      input.updatedBy,
     );
 
     return this.movementRepo.create(movement);
