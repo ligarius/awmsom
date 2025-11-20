@@ -14,10 +14,21 @@ const decimal = (value: number) => new Prisma.Decimal(value);
 
 describe('InboundService', () => {
   let prisma: any;
+  let tx: any;
   let inventoryService: jest.Mocked<InventoryService>;
   let service: InboundService;
 
   beforeEach(() => {
+    tx = {
+      inboundReceipt: { findUnique: jest.fn(), update: jest.fn() },
+      inboundReceiptLine: { update: jest.fn(), findMany: jest.fn() },
+      warehouse: { findUnique: jest.fn() },
+      batch: { findFirst: jest.fn(), create: jest.fn() },
+      location: { findUnique: jest.fn() },
+      movementHeader: { create: jest.fn() },
+      product: { findUnique: jest.fn() },
+    } as unknown as PrismaService;
+
     prisma = {
       warehouse: { findUnique: jest.fn() },
       inboundReceipt: { create: jest.fn(), findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn() },
@@ -31,6 +42,7 @@ describe('InboundService', () => {
       location: { findUnique: jest.fn() },
       inventory: { findFirst: jest.fn(), update: jest.fn(), create: jest.fn() },
       movementHeader: { create: jest.fn() },
+      $transaction: jest.fn((cb) => cb(tx)),
     } as unknown as PrismaService;
 
     inventoryService = {
@@ -76,7 +88,7 @@ describe('InboundService', () => {
   });
 
   it('confirms receipt and updates inventory for product without batch', async () => {
-    (prisma.inboundReceipt.findUnique as jest.Mock).mockResolvedValue({
+    (tx.inboundReceipt.findUnique as jest.Mock).mockResolvedValue({
       id: 'rec-1',
       warehouseId: 'wh-1',
       status: InboundReceiptStatus.DRAFT,
@@ -96,17 +108,17 @@ describe('InboundService', () => {
       ],
       warehouse: {},
     });
-    (prisma.location.findUnique as jest.Mock).mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
-    (prisma.inboundReceiptLine.findMany as jest.Mock).mockResolvedValue([
+    (tx.location.findUnique as jest.Mock).mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
+    (tx.inboundReceiptLine.findMany as jest.Mock).mockResolvedValue([
       {
         id: 'line-1',
         expectedQty: decimal(5),
         receivedQty: decimal(5),
       },
     ]);
-    (prisma.movementHeader.create as jest.Mock).mockResolvedValue({ id: 'mov-1', lines: [] });
-    (prisma.inboundReceiptLine.update as jest.Mock).mockResolvedValue({});
-    (prisma.inboundReceipt.update as jest.Mock).mockResolvedValue({});
+    (tx.movementHeader.create as jest.Mock).mockResolvedValue({ id: 'mov-1', lines: [] });
+    (tx.inboundReceiptLine.update as jest.Mock).mockResolvedValue({});
+    (tx.inboundReceipt.update as jest.Mock).mockResolvedValue({});
     inventoryService.increaseStock.mockResolvedValue({} as any);
 
     const result = await service.confirmReceipt('rec-1', {
@@ -120,8 +132,9 @@ describe('InboundService', () => {
         locationId: 'loc-1',
         stockStatus: StockStatus.AVAILABLE,
       }),
+      tx,
     );
-    expect(prisma.movementHeader.create).toHaveBeenCalledWith(
+    expect(tx.movementHeader.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           movementType: MovementType.INBOUND_RECEIPT,
@@ -133,7 +146,7 @@ describe('InboundService', () => {
   });
 
   it('throws when received quantity exceeds pending amount', async () => {
-    (prisma.inboundReceipt.findUnique as jest.Mock).mockResolvedValue({
+    (tx.inboundReceipt.findUnique as jest.Mock).mockResolvedValue({
       id: 'rec-1',
       warehouseId: 'wh-1',
       status: InboundReceiptStatus.DRAFT,
@@ -154,7 +167,7 @@ describe('InboundService', () => {
       warehouse: {},
     });
 
-    (prisma.location.findUnique as jest.Mock).mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
+    (tx.location.findUnique as jest.Mock).mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
 
     await expect(
       service.confirmReceipt('rec-1', {
@@ -165,7 +178,7 @@ describe('InboundService', () => {
   });
 
   it('creates or reuses batch for products requiring it during confirmation', async () => {
-    (prisma.inboundReceipt.findUnique as jest.Mock).mockResolvedValue({
+    (tx.inboundReceipt.findUnique as jest.Mock).mockResolvedValue({
       id: 'rec-2',
       warehouseId: 'wh-1',
       status: InboundReceiptStatus.DRAFT,
@@ -185,15 +198,15 @@ describe('InboundService', () => {
       ],
       warehouse: {},
     });
-    (prisma.location.findUnique as jest.Mock).mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
-    (prisma.batch.findFirst as jest.Mock).mockResolvedValue(null);
-    (prisma.batch.create as jest.Mock).mockResolvedValue({ id: 'batch-1' });
-    (prisma.inboundReceiptLine.update as jest.Mock).mockResolvedValue({});
-    (prisma.inboundReceiptLine.findMany as jest.Mock).mockResolvedValue([
+    (tx.location.findUnique as jest.Mock).mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
+    (tx.batch.findFirst as jest.Mock).mockResolvedValue(null);
+    (tx.batch.create as jest.Mock).mockResolvedValue({ id: 'batch-1' });
+    (tx.inboundReceiptLine.update as jest.Mock).mockResolvedValue({});
+    (tx.inboundReceiptLine.findMany as jest.Mock).mockResolvedValue([
       { id: 'line-2', expectedQty: decimal(3), receivedQty: decimal(3) },
     ]);
-    (prisma.inboundReceipt.update as jest.Mock).mockResolvedValue({});
-    (prisma.movementHeader.create as jest.Mock).mockResolvedValue({ id: 'mov-2', lines: [] });
+    (tx.inboundReceipt.update as jest.Mock).mockResolvedValue({});
+    (tx.movementHeader.create as jest.Mock).mockResolvedValue({ id: 'mov-2', lines: [] });
     inventoryService.increaseStock.mockResolvedValue({} as any);
 
     await service.confirmReceipt('rec-2', {
@@ -201,19 +214,63 @@ describe('InboundService', () => {
       lines: [{ lineId: 'line-2', receivedQty: 3, batchCode: 'B-1', expiryDate: '2025-01-01' }],
     });
 
-    expect(prisma.batch.create).toHaveBeenCalled();
+    expect(tx.batch.create).toHaveBeenCalled();
     expect(inventoryService.increaseStock).toHaveBeenCalledWith(
       expect.objectContaining({ batchId: 'batch-1' }),
+      tx,
     );
 
-    (prisma.batch.findFirst as jest.Mock).mockResolvedValue({ id: 'batch-1', productId: 'prod-2', batchCode: 'B-1' });
-    (prisma.batch.create as jest.Mock).mockClear();
+    (tx.batch.findFirst as jest.Mock).mockResolvedValue({ id: 'batch-1', productId: 'prod-2', batchCode: 'B-1' });
+    (tx.batch.create as jest.Mock).mockClear();
 
     await service.confirmReceipt('rec-2', {
       toLocationId: 'loc-1',
       lines: [{ lineId: 'line-2', receivedQty: 1, batchCode: 'B-1', expiryDate: '2025-01-01' }],
     });
 
-    expect(prisma.batch.create).not.toHaveBeenCalled();
+    expect(tx.batch.create).not.toHaveBeenCalled();
+  });
+
+  it('rolls back receipt confirmation when movement creation fails', async () => {
+    (tx.inboundReceipt.findUnique as jest.Mock).mockResolvedValue({
+      id: 'rec-3',
+      warehouseId: 'wh-1',
+      status: InboundReceiptStatus.DRAFT,
+      receivedAt: null,
+      lines: [
+        {
+          id: 'line-3',
+          inboundReceiptId: 'rec-3',
+          productId: 'prod-3',
+          expectedQty: decimal(2),
+          receivedQty: decimal(0),
+          uom: 'EA',
+          batchCode: null,
+          expiryDate: null,
+          product: { id: 'prod-3', requiresBatch: false, requiresExpiryDate: false },
+        },
+      ],
+      warehouse: {},
+    });
+    (tx.location.findUnique as jest.Mock).mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
+    (tx.inboundReceiptLine.update as jest.Mock).mockResolvedValue({});
+    (tx.inboundReceiptLine.findMany as jest.Mock).mockResolvedValue([
+      { id: 'line-3', expectedQty: decimal(2), receivedQty: decimal(2) },
+    ]);
+    (tx.movementHeader.create as jest.Mock).mockRejectedValue(new Error('movement failure'));
+    inventoryService.increaseStock.mockResolvedValue({} as any);
+
+    await expect(
+      service.confirmReceipt('rec-3', {
+        toLocationId: 'loc-1',
+        lines: [{ lineId: 'line-3', receivedQty: 2 }],
+      }),
+    ).rejects.toThrow('movement failure');
+
+    expect(inventoryService.increaseStock).toHaveBeenCalledWith(
+      expect.objectContaining({ productId: 'prod-3' }),
+      tx,
+    );
+    expect(tx.inboundReceipt.update).not.toHaveBeenCalled();
   });
 });
