@@ -193,6 +193,73 @@ export class InventoryService {
     return this.applyInventoryAdjustment({ ...dto, createdBy: 'system' });
   }
 
+  async increaseStock(
+    params: {
+      warehouseId: string;
+      productId: string;
+      batchId?: string;
+      locationId: string;
+      quantity: number | Prisma.Decimal;
+      uom: string;
+      stockStatus: StockStatus;
+    },
+    prismaClient: PrismaService | Prisma.TransactionClient = this.prisma,
+  ) {
+    const product = await prismaClient.product.findUnique({ where: { id: params.productId } });
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    if (params.batchId) {
+      const batch = await prismaClient.batch.findUnique({ where: { id: params.batchId } });
+      if (!batch) {
+        throw new NotFoundException('Batch not found');
+      }
+    }
+
+    const location = await prismaClient.location.findUnique({ where: { id: params.locationId } });
+    if (!location) {
+      throw new NotFoundException('Location not found');
+    }
+
+    if (location.warehouseId !== params.warehouseId) {
+      throw new BadRequestException('Location does not belong to warehouse');
+    }
+
+    const incrementQty = new Prisma.Decimal(params.quantity);
+    if (incrementQty.lte(0)) {
+      throw new BadRequestException('Increase quantity must be greater than zero');
+    }
+
+    const existingInventory = await prismaClient.inventory.findFirst({
+      where: {
+        productId: params.productId,
+        batchId: params.batchId ?? null,
+        locationId: params.locationId,
+        uom: params.uom,
+        stockStatus: params.stockStatus,
+      },
+    });
+
+    if (existingInventory) {
+      return prismaClient.inventory.update({
+        where: { id: existingInventory.id },
+        data: { quantity: new Prisma.Decimal(existingInventory.quantity).plus(incrementQty) },
+      });
+    }
+
+    return prismaClient.inventory.create({
+      data: {
+        productId: params.productId,
+        batchId: params.batchId,
+        locationId: params.locationId,
+        quantity: incrementQty,
+        uom: params.uom,
+        stockStatus: params.stockStatus,
+      },
+    });
+  }
+
   async listInventoryAdjustments(params: {
     warehouseId?: string;
     productId?: string;

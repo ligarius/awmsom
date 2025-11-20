@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { AdjustmentType, CycleCountStatus, Prisma } from '@prisma/client';
+import { AdjustmentType, CycleCountStatus, Prisma, StockStatus } from '@prisma/client';
 import { InventoryService } from '../../src/modules/inventory/inventory.service';
 
 const decimal = (value: number) => new Prisma.Decimal(value);
@@ -156,5 +156,65 @@ describe('InventoryService', () => {
         reason: 'Invalid',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  describe('increaseStock', () => {
+    beforeEach(() => {
+      prisma.product.findUnique.mockResolvedValue({ id: 'prod-1', defaultUom: 'PCS' });
+      prisma.location.findUnique.mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
+      prisma.inventory.findFirst.mockResolvedValue(null);
+    });
+
+    it('creates inventory when none exists for the parameters', async () => {
+      prisma.inventory.create.mockResolvedValue({ id: 'inv-1', quantity: decimal(3) });
+
+      const result = await service.increaseStock({
+        warehouseId: 'wh-1',
+        productId: 'prod-1',
+        locationId: 'loc-1',
+        quantity: 3,
+        uom: 'PCS',
+        stockStatus: StockStatus.AVAILABLE,
+      } as any);
+
+      expect(result).toEqual(expect.objectContaining({ id: 'inv-1' }));
+      expect(prisma.inventory.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ quantity: decimal(3) }) }),
+      );
+    });
+
+    it('increments existing inventory record', async () => {
+      prisma.inventory.findFirst.mockResolvedValue({ id: 'inv-2', quantity: decimal(2) });
+      prisma.inventory.update.mockResolvedValue({ id: 'inv-2', quantity: decimal(5) });
+
+      const result = await service.increaseStock({
+        warehouseId: 'wh-1',
+        productId: 'prod-1',
+        locationId: 'loc-1',
+        quantity: 3,
+        uom: 'PCS',
+        stockStatus: StockStatus.AVAILABLE,
+      } as any);
+
+      expect(result).toEqual(expect.objectContaining({ quantity: decimal(5) }));
+      expect(prisma.inventory.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ quantity: decimal(5) }) }),
+      );
+    });
+
+    it('validates location belongs to warehouse', async () => {
+      prisma.location.findUnique.mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-2' });
+
+      await expect(
+        service.increaseStock({
+          warehouseId: 'wh-1',
+          productId: 'prod-1',
+          locationId: 'loc-1',
+          quantity: 1,
+          uom: 'PCS',
+          stockStatus: StockStatus.AVAILABLE,
+        } as any),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
   });
 });
