@@ -132,6 +132,38 @@ describe('InboundService', () => {
     expect(result.status).toBe(InboundReceiptStatus.RECEIVED);
   });
 
+  it('throws when received quantity exceeds pending amount', async () => {
+    (prisma.inboundReceipt.findUnique as jest.Mock).mockResolvedValue({
+      id: 'rec-1',
+      warehouseId: 'wh-1',
+      status: InboundReceiptStatus.DRAFT,
+      receivedAt: null,
+      lines: [
+        {
+          id: 'line-1',
+          inboundReceiptId: 'rec-1',
+          productId: 'prod-1',
+          expectedQty: decimal(5),
+          receivedQty: decimal(3),
+          uom: 'EA',
+          batchCode: null,
+          expiryDate: null,
+          product: { id: 'prod-1', requiresBatch: false, requiresExpiryDate: false },
+        },
+      ],
+      warehouse: {},
+    });
+
+    (prisma.location.findUnique as jest.Mock).mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
+
+    await expect(
+      service.confirmReceipt('rec-1', {
+        toLocationId: 'loc-1',
+        lines: [{ lineId: 'line-1', receivedQty: 3 }],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('creates or reuses batch for products requiring it during confirmation', async () => {
     (prisma.inboundReceipt.findUnique as jest.Mock).mockResolvedValue({
       id: 'rec-2',
