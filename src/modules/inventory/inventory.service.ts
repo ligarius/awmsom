@@ -15,13 +15,16 @@ interface IncreaseStockParams {
 export class InventoryService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async increaseStock(params: IncreaseStockParams) {
-    const location = await this.prisma.location.findUnique({ where: { id: params.locationId } });
+  async increaseStock(
+    params: IncreaseStockParams,
+    prismaClient: PrismaService | Prisma.TransactionClient = this.prisma,
+  ) {
+    const location = await prismaClient.location.findUnique({ where: { id: params.locationId } });
     if (!location) {
       throw new NotFoundException('Location not found');
     }
 
-    const existing = await this.prisma.inventory.findFirst({
+    const existing = await prismaClient.inventory.findFirst({
       where: {
         productId: params.productId,
         batchId: params.batchId ?? null,
@@ -32,7 +35,7 @@ export class InventoryService {
     });
 
     if (existing) {
-      return this.prisma.inventory.update({
+      return prismaClient.inventory.update({
         where: { id: existing.id },
         data: {
           quantity: new Prisma.Decimal(existing.quantity).plus(params.quantity),
@@ -40,7 +43,7 @@ export class InventoryService {
       });
     }
 
-    return this.prisma.inventory.create({
+    return prismaClient.inventory.create({
       data: {
         productId: params.productId,
         batchId: params.batchId,
