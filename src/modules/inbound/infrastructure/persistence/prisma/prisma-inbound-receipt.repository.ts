@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, InboundReceiptLine as PrismaReceiptLine } from '@prisma/client';
-import { PrismaService } from '../../../../prisma/prisma.service';
-import { InboundReceipt } from '../../domain/entities/inbound-receipt.entity';
-import { InboundReceiptLine } from '../../domain/entities/inbound-receipt-line.entity';
-import { InboundReceiptRepository } from '../../domain/repositories/inbound-receipt.repository';
+import { Prisma } from '@prisma/client';
+import { Decimal } from '@prisma/client/runtime/library';
+import { PrismaService } from '../../../../../prisma/prisma.service';
+import { InboundReceipt } from '../../../domain/entities/inbound-receipt.entity';
+import { InboundReceiptLine } from '../../../domain/entities/inbound-receipt-line.entity';
+import { InboundReceiptRepository } from '../../../domain/repositories/inbound-receipt.repository';
 
 @Injectable()
 export class PrismaInboundReceiptRepository implements InboundReceiptRepository {
@@ -13,13 +14,17 @@ export class PrismaInboundReceiptRepository implements InboundReceiptRepository 
     const created = await this.prisma.inboundReceipt.create({
       data: {
         reference: receipt.reference,
+        createdBy: receipt.createdBy,
+        updatedBy: receipt.updatedBy,
         lines: {
           create: receipt.lines.map((line) => ({
             productId: line.productId,
-            quantity: new Prisma.Decimal(line.quantity),
+            quantity: new Decimal(line.quantity),
             uom: line.uom,
             batchCode: line.batchCode,
             expiryDate: line.expiryDate,
+            createdBy: line.createdBy ?? receipt.createdBy,
+            updatedBy: line.updatedBy ?? receipt.updatedBy,
           })),
         },
       },
@@ -28,16 +33,25 @@ export class PrismaInboundReceiptRepository implements InboundReceiptRepository 
 
     return new InboundReceipt(
       created.reference ?? undefined,
-      created.lines.map((line: PrismaReceiptLine) =>
+      created.lines.map((line: any) =>
         new InboundReceiptLine(
           line.productId,
           Number(line.quantity),
           line.uom,
           line.batchCode ?? undefined,
           line.expiryDate ?? undefined,
+          line.id,
+          line.createdAt,
+          line.updatedAt,
+          line.createdBy ?? undefined,
+          line.updatedBy ?? undefined,
         ),
       ),
       created.id,
+      created.createdAt,
+      created.updatedAt,
+      created.createdBy ?? undefined,
+      created.updatedBy ?? undefined,
     );
   }
 

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../../prisma/prisma.service';
+import { PrismaService } from '../../../../prisma/prisma.service';
 import { Warehouse } from '../../domain/entities/warehouse.entity';
 import { WarehouseRepository } from '../../domain/repositories/warehouse.repository';
 import { CreateWarehouseCommand, WarehouseQuery } from '../../application/dto/warehouse-commands.dto';
@@ -14,6 +14,8 @@ export class PrismaWarehouseRepository implements WarehouseRepository {
         code: data.code,
         name: data.name,
         isActive: data.isActive ?? true,
+        createdBy: data.createdBy,
+        updatedBy: data.updatedBy,
       },
     });
 
@@ -30,7 +32,10 @@ export class PrismaWarehouseRepository implements WarehouseRepository {
     return record ? this.toDomain(record) : null;
   }
 
-  async update(id: string, data: { name?: string; isActive?: boolean }): Promise<Warehouse> {
+  async update(
+    id: string,
+    data: { name?: string; isActive?: boolean; updatedBy?: string },
+  ): Promise<Warehouse> {
     const record = await this.prisma.warehouse.update({
       where: { id },
       data,
@@ -59,7 +64,7 @@ export class PrismaWarehouseRepository implements WarehouseRepository {
     ]);
 
     return {
-      data: records.map((record) => this.toDomain(record)),
+      data: records.map((record: any) => this.toDomain(record)),
       total,
     };
   }
@@ -78,6 +83,8 @@ export class PrismaWarehouseRepository implements WarehouseRepository {
     isActive: boolean;
     createdAt: Date;
     updatedAt: Date;
+    createdBy?: string | null;
+    updatedBy?: string | null;
   }): Warehouse {
     return new Warehouse(
       record.id,
@@ -86,6 +93,8 @@ export class PrismaWarehouseRepository implements WarehouseRepository {
       record.isActive,
       record.createdAt,
       record.updatedAt,
+      record.createdBy ?? undefined,
+      record.updatedBy ?? undefined,
     );
   }
 }
