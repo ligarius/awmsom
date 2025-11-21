@@ -152,10 +152,20 @@ export class InventoryService {
         throw new BadRequestException('All pending cycle count lines must be submitted');
       }
 
+      const seenLineIds = new Set<string>();
       for (const line of dto.lines) {
+        if (seenLineIds.has(line.lineId)) {
+          throw new BadRequestException('Duplicate cycle count lines in submission');
+        }
+
+        seenLineIds.add(line.lineId);
         const existingLine = await tx.cycleCountLine.findUnique({ where: { id: line.lineId } });
         if (!existingLine || existingLine.cycleCountTaskId !== taskId) {
           throw new NotFoundException(`Cycle count line ${line.lineId} not found for task`);
+        }
+
+        if (existingLine.countedAt) {
+          throw new BadRequestException(`Cycle count line ${line.lineId} has already been counted`);
         }
 
         const countedQty = new Prisma.Decimal(line.countedQty);
