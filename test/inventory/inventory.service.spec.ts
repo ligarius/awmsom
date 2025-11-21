@@ -227,6 +227,34 @@ describe('InventoryService', () => {
     expect(prisma.cycleCountTask.update).not.toHaveBeenCalled();
   });
 
+  it('rejects resubmitting already counted cycle count lines', async () => {
+    prisma.cycleCountTask.findUnique.mockResolvedValue({
+      id: 'task-1',
+      status: CycleCountStatus.IN_PROGRESS,
+      warehouseId: 'wh-1',
+    });
+
+    prisma.cycleCountLine.findMany.mockResolvedValue([]);
+    prisma.cycleCountLine.findUnique.mockResolvedValue({
+      id: 'line-1',
+      cycleCountTaskId: 'task-1',
+      expectedQty: decimal(5),
+      countedQty: decimal(5),
+      countedAt: new Date(),
+      productId: 'prod-1',
+      locationId: 'loc-1',
+      uom: 'PCS',
+    });
+
+    await expect(
+      service.submitCycleCount('task-1', {
+        lines: [{ lineId: 'line-1', countedQty: 5 }],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.cycleCountLine.update).not.toHaveBeenCalled();
+  });
+
   it('submits cycle count and triggers adjustments', async () => {
     prisma.cycleCountTask.findUnique.mockResolvedValue({
       id: 'task-1',
@@ -299,6 +327,44 @@ describe('InventoryService', () => {
 
     expect(prisma.cycleCountTask.update).not.toHaveBeenCalled();
     expect(adjustmentSpy).not.toHaveBeenCalled();
+  });
+
+  it('submits pending lines even when other lines are already counted', async () => {
+    prisma.cycleCountTask.findUnique.mockResolvedValue({
+      id: 'task-1',
+      status: CycleCountStatus.IN_PROGRESS,
+      warehouseId: 'wh-1',
+    });
+
+    prisma.cycleCountLine.findMany.mockResolvedValue([{ id: 'line-2', countedAt: null }]);
+
+    prisma.cycleCountLine.findUnique.mockResolvedValue({
+      id: 'line-2',
+      cycleCountTaskId: 'task-1',
+      expectedQty: decimal(4),
+      productId: 'prod-1',
+      locationId: 'loc-1',
+      uom: 'PCS',
+      countedAt: null,
+    });
+
+    prisma.cycleCountLine.update.mockResolvedValue({});
+    prisma.cycleCountLine.count.mockResolvedValue(0);
+    prisma.cycleCountTask.update.mockResolvedValue({});
+
+    jest.spyOn(service, 'applyInventoryAdjustment').mockResolvedValue({} as any);
+
+    await service.submitCycleCount('task-1', {
+      lines: [{ lineId: 'line-2', countedQty: 4 }],
+    });
+
+    expect(prisma.cycleCountLine.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'line-2' },
+        data: expect.objectContaining({ countedQty: decimal(4) }),
+      }),
+    );
+    expect(prisma.cycleCountTask.update).toHaveBeenCalled();
   });
 
   it('submits cycle count using predominant non-available stock status', async () => {
