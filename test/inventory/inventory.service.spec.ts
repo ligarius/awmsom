@@ -136,6 +136,7 @@ describe('InventoryService', () => {
       expectedQty: decimal(5),
       productId: 'prod-1',
       locationId: 'loc-1',
+      uom: 'BOX',
     });
 
     prisma.cycleCountLine.update.mockResolvedValue({});
@@ -154,11 +155,54 @@ describe('InventoryService', () => {
         productId: 'prod-1',
         locationId: 'loc-1',
         newQty: 6,
+        uom: 'BOX',
       }),
       prisma,
     );
     expect(prisma.cycleCountTask.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: CycleCountStatus.COMPLETED }) }),
+    );
+  });
+
+  it('reconciles cycle count using line UOM and updates existing inventory', async () => {
+    prisma.cycleCountTask.findUnique.mockResolvedValue({
+      id: 'task-1',
+      status: CycleCountStatus.IN_PROGRESS,
+      warehouseId: 'wh-1',
+    });
+
+    prisma.cycleCountLine.findUnique.mockResolvedValue({
+      id: 'line-1',
+      cycleCountTaskId: 'task-1',
+      expectedQty: decimal(12),
+      productId: 'prod-1',
+      locationId: 'loc-1',
+      uom: 'BOX',
+    });
+
+    prisma.cycleCountLine.update.mockResolvedValue({});
+    prisma.product.findUnique.mockResolvedValue({ id: 'prod-1', defaultUom: 'PCS' });
+    prisma.location.findUnique.mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
+    prisma.inventory.findFirst.mockResolvedValue({ id: 'inv-box', quantity: decimal(12), uom: 'BOX' });
+    prisma.inventory.update.mockResolvedValue({ id: 'inv-box', quantity: decimal(10), uom: 'BOX' });
+    prisma.movementHeader.create.mockResolvedValue({ id: 'mh-1' });
+    prisma.inventoryAdjustment.create.mockResolvedValue({ id: 'adj-1' });
+
+    await service.submitCycleCount('task-1', {
+      lines: [
+        { lineId: 'line-1', countedQty: 10 },
+      ],
+    });
+
+    expect(prisma.inventory.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ uom: 'BOX' }) }),
+    );
+    expect(prisma.inventory.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'inv-box' }, data: { quantity: decimal(10) } }),
+    );
+    expect(prisma.inventory.create).not.toHaveBeenCalled();
+    expect(prisma.movementLine.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ uom: 'BOX', quantity: decimal(2) }) }),
     );
   });
 
@@ -201,6 +245,34 @@ describe('InventoryService', () => {
         reason: 'Invalid',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('updates inventory and movements using provided non-default UOM', async () => {
+    prisma.product.findUnique.mockResolvedValue({ id: 'prod-1', defaultUom: 'PCS' });
+    prisma.location.findUnique.mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
+    prisma.inventory.findFirst.mockResolvedValue({ id: 'inv-box', quantity: decimal(12), uom: 'BOX' });
+    prisma.inventory.update.mockResolvedValue({ id: 'inv-box', quantity: decimal(10), uom: 'BOX' });
+    prisma.movementHeader.create.mockResolvedValue({ id: 'mh-1' });
+
+    await service.applyInventoryAdjustment({
+      warehouseId: 'wh-1',
+      productId: 'prod-1',
+      locationId: 'loc-1',
+      newQty: 10,
+      uom: 'BOX',
+      reason: 'Cycle count adjustment',
+    });
+
+    expect(prisma.inventory.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ uom: 'BOX' }) }),
+    );
+    expect(prisma.inventory.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'inv-box' }, data: { quantity: decimal(10) } }),
+    );
+    expect(prisma.inventory.create).not.toHaveBeenCalled();
+    expect(prisma.movementLine.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ uom: 'BOX', quantity: decimal(2) }) }),
+    );
   });
 
   describe('increaseStock', () => {
