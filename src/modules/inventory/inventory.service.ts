@@ -165,6 +165,14 @@ export class InventoryService {
             continue;
           }
 
+          const stockStatus = await this.determineCountStockStatus(
+            lineData.productId,
+            lineData.batchId ?? undefined,
+            lineData.locationId,
+            lineData.uom,
+            tx,
+          );
+
           await this.applyInventoryAdjustment(
             {
               warehouseId: task.warehouseId,
@@ -173,6 +181,7 @@ export class InventoryService {
               locationId: lineData.locationId,
               newQty: line.countedQty.toNumber(),
               uom: lineData.uom,
+              stockStatus,
               reason: 'Cycle count adjustment',
               reference: taskId,
               createdBy: 'system',
@@ -322,6 +331,7 @@ export class InventoryService {
       locationId: string;
       newQty: number;
       uom?: string;
+      stockStatus?: StockStatus;
       reason: string;
       reference?: string;
       createdBy?: string;
@@ -357,12 +367,21 @@ export class InventoryService {
       throw new BadRequestException('Stock cannot be negative');
     }
 
+    const stockStatus = params.stockStatus
+      ?? (await this.determineCountStockStatus(
+        params.productId,
+        params.batchId,
+        params.locationId,
+        uom,
+        prismaClient,
+      ));
+
     const existingInventory = await prismaClient.inventory.findFirst({
       where: {
         productId: params.productId,
         batchId: params.batchId ?? null,
         locationId: params.locationId,
-        stockStatus: StockStatus.AVAILABLE,
+        stockStatus,
         uom,
       },
     });
@@ -388,7 +407,7 @@ export class InventoryService {
           locationId: params.locationId,
           quantity: newQtyDecimal,
           uom,
-          stockStatus: StockStatus.AVAILABLE,
+          stockStatus,
         },
       });
     }
@@ -473,5 +492,53 @@ export class InventoryService {
     const sumQty = inventory[0]?._sum.quantity ?? new Prisma.Decimal(0);
 
     return new Prisma.Decimal(sumQty);
+  }
+
+  private async determineCountStockStatus(
+    productId: string,
+    batchId: string | undefined,
+    locationId: string,
+    uom: string,
+    prismaClient: PrismaService | Prisma.TransactionClient = this.prisma,
+  ): Promise<StockStatus> {
+    const inventoryByStatus =
+      (await prismaClient.inventory.groupBy({
+        where: {
+          productId,
+          batchId: batchId ?? null,
+          locationId,
+          uom,
+        },
+        by: ['stockStatus'],
+        _sum: { quantity: true },
+      })) ?? [];
+
+    const availableEntry = inventoryByStatus.find((record) => {
+      const qty = new Prisma.Decimal(record._sum.quantity ?? 0);
+      return record.stockStatus === StockStatus.AVAILABLE && qty.gt(0);
+    });
+
+    if (availableEntry) {
+      return StockStatus.AVAILABLE;
+    }
+
+    if (inventoryByStatus.length) {
+      const predominant = inventoryByStatus.reduce(
+        (current, record) => {
+          const qty = new Prisma.Decimal(record._sum.quantity ?? 0);
+          if (!current || qty.gt(current.qty)) {
+            return { status: record.stockStatus, qty };
+          }
+          return current;
+        },
+        null as { status: StockStatus; qty: Prisma.Decimal } | null,
+      );
+
+      if (predominant) {
+        return predominant.status;
+      }
+    }
+
+    return StockStatus.AVAILABLE;
   }
 }
