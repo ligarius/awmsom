@@ -172,6 +172,7 @@ export class InventoryService {
               batchId: lineData.batchId ?? undefined,
               locationId: lineData.locationId,
               newQty: line.countedQty.toNumber(),
+              uom: lineData.uom,
               reason: 'Cycle count adjustment',
               reference: taskId,
               createdBy: 'system',
@@ -320,6 +321,7 @@ export class InventoryService {
       batchId?: string;
       locationId: string;
       newQty: number;
+      uom?: string;
       reason: string;
       reference?: string;
       createdBy?: string;
@@ -330,6 +332,8 @@ export class InventoryService {
     if (!product) {
       throw new NotFoundException('Product not found');
     }
+
+    const uom = params.uom ?? product.defaultUom;
 
     if (params.batchId) {
       const batch = await prismaClient.batch.findUnique({ where: { id: params.batchId } });
@@ -359,7 +363,7 @@ export class InventoryService {
         batchId: params.batchId ?? null,
         locationId: params.locationId,
         stockStatus: StockStatus.AVAILABLE,
-        uom: product.defaultUom,
+        uom,
       },
     });
 
@@ -383,7 +387,7 @@ export class InventoryService {
           batchId: params.batchId,
           locationId: params.locationId,
           quantity: newQtyDecimal,
-          uom: product.defaultUom,
+          uom,
           stockStatus: StockStatus.AVAILABLE,
         },
       });
@@ -413,7 +417,7 @@ export class InventoryService {
         fromLocationId: differenceQty.lt(0) ? params.locationId : null,
         toLocationId: differenceQty.gt(0) ? params.locationId : null,
         quantity: differenceQty.abs(),
-        uom: product.defaultUom,
+        uom,
       },
     });
 
