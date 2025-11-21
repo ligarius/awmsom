@@ -79,9 +79,7 @@ describe('InventoryService', () => {
     ]);
 
     const lines = await service.addCycleCountLines('task-1', {
-      lines: [
-        { productId: 'prod-1', locationId: 'loc-1', uom: 'PCS', expectedQty: 0 },
-      ],
+      lines: [{ productId: 'prod-1', locationId: 'loc-1', uom: 'PCS' }],
     });
 
     expect(lines[0].expectedQty.equals(decimal(5))).toBe(true);
@@ -101,6 +99,31 @@ describe('InventoryService', () => {
     expect(prisma.cycleCountLine.createMany).toHaveBeenCalled();
   });
 
+  it('persists provided expected quantity when supplied in request', async () => {
+    prisma.cycleCountTask.findUnique.mockResolvedValue({
+      id: 'task-1',
+      status: CycleCountStatus.PENDING,
+      warehouseId: 'wh-1',
+    });
+    prisma.product.findUnique.mockResolvedValue({ id: 'prod-1' });
+    prisma.location.findUnique.mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
+    prisma.cycleCountLine.findMany.mockResolvedValue([
+      { id: 'line-provided', expectedQty: decimal(9), productId: 'prod-1', locationId: 'loc-1' },
+    ]);
+
+    const getExpectedSpy = jest.spyOn<any, any>(service as any, 'getExpectedQty');
+
+    const lines = await service.addCycleCountLines('task-1', {
+      lines: [{ productId: 'prod-1', locationId: 'loc-1', uom: 'PCS', expectedQty: 9 }],
+    });
+
+    expect(getExpectedSpy).not.toHaveBeenCalled();
+    expect(lines[0].expectedQty.equals(decimal(9))).toBe(true);
+    expect(prisma.cycleCountLine.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.arrayContaining([expect.objectContaining({ expectedQty: decimal(9) })]) }),
+    );
+  });
+
   it('includes reserved and in-transit stock when calculating expected quantities', async () => {
     prisma.cycleCountTask.findUnique.mockResolvedValueOnce({
       id: 'task-1',
@@ -115,9 +138,7 @@ describe('InventoryService', () => {
     ]);
 
     const lines = await service.addCycleCountLines('task-1', {
-      lines: [
-        { productId: 'prod-1', locationId: 'loc-1', uom: 'PCS', expectedQty: 0 },
-      ],
+      lines: [{ productId: 'prod-1', locationId: 'loc-1', uom: 'PCS' }],
     });
 
     prisma.cycleCountTask.findUnique.mockResolvedValueOnce({
