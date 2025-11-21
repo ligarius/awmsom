@@ -56,6 +56,31 @@ export class InventoryService {
     const linesToCreate = [] as Prisma.CycleCountLineCreateManyInput[];
 
     for (const line of dto.lines) {
+      const product = await prismaClient.product.findUnique({ where: { id: line.productId } });
+      if (!product) {
+        throw new BadRequestException('Product not found');
+      }
+
+      if (line.batchId) {
+        const batch = await prismaClient.batch.findUnique({ where: { id: line.batchId } });
+        if (!batch) {
+          throw new BadRequestException('Batch not found');
+        }
+
+        if (batch.productId !== line.productId) {
+          throw new BadRequestException('Batch does not belong to product');
+        }
+      }
+
+      const location = await prismaClient.location.findUnique({ where: { id: line.locationId } });
+      if (!location) {
+        throw new BadRequestException('Location not found');
+      }
+
+      if (location.warehouseId !== task.warehouseId) {
+        throw new BadRequestException('Location does not belong to cycle count warehouse');
+      }
+
       const expectedQty = await this.getExpectedQty(
         line.productId,
         line.batchId,
