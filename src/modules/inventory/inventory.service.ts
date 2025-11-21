@@ -139,6 +139,19 @@ export class InventoryService {
     const submittedLines = [] as { id: string; differenceQty: Prisma.Decimal; countedQty: Prisma.Decimal }[];
 
     await this.prisma.$transaction(async (tx) => {
+      const pendingLines = await tx.cycleCountLine.findMany({
+        where: { cycleCountTaskId: taskId, countedAt: null },
+        select: { id: true },
+      });
+
+      const pendingLineIds = pendingLines.map((line) => line.id);
+      const submittedLineIds = dto.lines.map((line) => line.lineId);
+
+      const missingLines = pendingLineIds.filter((lineId) => !submittedLineIds.includes(lineId));
+      if (missingLines.length) {
+        throw new BadRequestException('All pending cycle count lines must be submitted');
+      }
+
       for (const line of dto.lines) {
         const existingLine = await tx.cycleCountLine.findUnique({ where: { id: line.lineId } });
         if (!existingLine || existingLine.cycleCountTaskId !== taskId) {
@@ -194,10 +207,16 @@ export class InventoryService {
         }
       }
 
-      await tx.cycleCountTask.update({
-        where: { id: taskId },
-        data: { status: CycleCountStatus.COMPLETED, completedAt: now },
+      const remainingPendingLines = await tx.cycleCountLine.count({
+        where: { cycleCountTaskId: taskId, countedAt: null },
       });
+
+      if (remainingPendingLines === 0) {
+        await tx.cycleCountTask.update({
+          where: { id: taskId },
+          data: { status: CycleCountStatus.COMPLETED, completedAt: now },
+        });
+      }
     });
 
     return this.prisma.cycleCountTask.findUnique({
