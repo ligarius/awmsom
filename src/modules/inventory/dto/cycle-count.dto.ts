@@ -17,8 +17,9 @@ export class CreateCycleCountLineInput {
   uom: string;
 
   @Type(() => Number)
+  @IsOptional()
   @IsNumber()
-  expectedQty: number;
+  expectedQty?: number;
 }
 
 export class CreateCycleCountTaskDto {

@@ -81,13 +81,16 @@ export class InventoryService {
         throw new BadRequestException('Location does not belong to cycle count warehouse');
       }
 
-      const expectedQty = await this.getExpectedQty(
-        line.productId,
-        line.batchId,
-        line.locationId,
-        line.uom,
-        prismaClient,
-      );
+      const expectedQty =
+        line.expectedQty === undefined
+          ? await this.getExpectedQty(
+              line.productId,
+              line.batchId,
+              line.locationId,
+              line.uom,
+              prismaClient,
+            )
+          : new Prisma.Decimal(line.expectedQty);
 
       linesToCreate.push({
         cycleCountTaskId: taskId,
