@@ -31,6 +31,9 @@ describe('InventoryService', () => {
       product: {
         findUnique: jest.fn(),
       },
+      batch: {
+        findUnique: jest.fn(),
+      },
       location: {
         findUnique: jest.fn(),
       },
@@ -62,7 +65,13 @@ describe('InventoryService', () => {
   });
 
   it('adds cycle count lines computing expected quantity', async () => {
-    prisma.cycleCountTask.findUnique.mockResolvedValue({ id: 'task-1', status: CycleCountStatus.PENDING });
+    prisma.cycleCountTask.findUnique.mockResolvedValue({
+      id: 'task-1',
+      status: CycleCountStatus.PENDING,
+      warehouseId: 'wh-1',
+    });
+    prisma.product.findUnique.mockResolvedValue({ id: 'prod-1' });
+    prisma.location.findUnique.mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
     prisma.inventory.findFirst.mockResolvedValue({ quantity: decimal(5) });
     prisma.cycleCountLine.findMany.mockResolvedValue([
       { id: 'line-1', expectedQty: decimal(5), productId: 'prod-1', locationId: 'loc-1' },
@@ -76,6 +85,42 @@ describe('InventoryService', () => {
 
     expect(lines[0].expectedQty.equals(decimal(5))).toBe(true);
     expect(prisma.cycleCountLine.createMany).toHaveBeenCalled();
+  });
+
+  it('rejects invalid product when adding cycle count lines', async () => {
+    prisma.cycleCountTask.findUnique.mockResolvedValue({
+      id: 'task-1',
+      status: CycleCountStatus.PENDING,
+      warehouseId: 'wh-1',
+    });
+    prisma.product.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.addCycleCountLines('task-1', {
+        lines: [
+          { productId: 'missing', locationId: 'loc-1', uom: 'PCS', expectedQty: 0 },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects cross-warehouse location when adding cycle count lines', async () => {
+    prisma.cycleCountTask.findUnique.mockResolvedValue({
+      id: 'task-1',
+      status: CycleCountStatus.PENDING,
+      warehouseId: 'wh-1',
+    });
+    prisma.product.findUnique.mockResolvedValue({ id: 'prod-1' });
+    prisma.batch.findUnique?.mockResolvedValue({ id: 'batch-1', productId: 'prod-1' });
+    prisma.location.findUnique.mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-2' });
+
+    await expect(
+      service.addCycleCountLines('task-1', {
+        lines: [
+          { productId: 'prod-1', batchId: 'batch-1', locationId: 'loc-1', uom: 'PCS', expectedQty: 0 },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('submits cycle count and triggers adjustments', async () => {
