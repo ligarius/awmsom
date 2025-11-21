@@ -25,6 +25,7 @@ describe('InventoryService', () => {
       },
       inventory: {
         findFirst: jest.fn(),
+        groupBy: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
       },
@@ -72,7 +73,7 @@ describe('InventoryService', () => {
     });
     prisma.product.findUnique.mockResolvedValue({ id: 'prod-1' });
     prisma.location.findUnique.mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
-    prisma.inventory.findFirst.mockResolvedValue({ quantity: decimal(5) });
+    prisma.inventory.groupBy.mockResolvedValue([{ _sum: { quantity: decimal(5) } }]);
     prisma.cycleCountLine.findMany.mockResolvedValue([
       { id: 'line-1', expectedQty: decimal(5), productId: 'prod-1', locationId: 'loc-1' },
     ]);
@@ -84,7 +85,65 @@ describe('InventoryService', () => {
     });
 
     expect(lines[0].expectedQty.equals(decimal(5))).toBe(true);
+    expect(prisma.inventory.groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          productId: 'prod-1',
+          batchId: null,
+          locationId: 'loc-1',
+          uom: 'PCS',
+          stockStatus: expect.objectContaining({ in: expect.arrayContaining([StockStatus.RESERVED]) }),
+        }),
+        by: ['productId', 'batchId', 'locationId', 'uom'],
+        _sum: { quantity: true },
+      }),
+    );
     expect(prisma.cycleCountLine.createMany).toHaveBeenCalled();
+  });
+
+  it('includes reserved and in-transit stock when calculating expected quantities', async () => {
+    prisma.cycleCountTask.findUnique.mockResolvedValueOnce({
+      id: 'task-1',
+      status: CycleCountStatus.PENDING,
+      warehouseId: 'wh-1',
+    });
+    prisma.product.findUnique.mockResolvedValue({ id: 'prod-1' });
+    prisma.location.findUnique.mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
+    prisma.inventory.groupBy.mockResolvedValueOnce([{ _sum: { quantity: decimal(7) } }]);
+    prisma.cycleCountLine.findMany.mockResolvedValue([
+      { id: 'line-agg', expectedQty: decimal(7), productId: 'prod-1', locationId: 'loc-1', uom: 'PCS' },
+    ]);
+
+    const lines = await service.addCycleCountLines('task-1', {
+      lines: [
+        { productId: 'prod-1', locationId: 'loc-1', uom: 'PCS', expectedQty: 0 },
+      ],
+    });
+
+    prisma.cycleCountTask.findUnique.mockResolvedValueOnce({
+      id: 'task-1',
+      status: CycleCountStatus.IN_PROGRESS,
+      warehouseId: 'wh-1',
+    });
+    prisma.cycleCountLine.findUnique.mockResolvedValue({
+      id: 'line-agg',
+      cycleCountTaskId: 'task-1',
+      expectedQty: decimal(7),
+      productId: 'prod-1',
+      locationId: 'loc-1',
+      uom: 'PCS',
+    });
+    prisma.cycleCountLine.update.mockResolvedValue({});
+    prisma.cycleCountTask.update.mockResolvedValue({});
+
+    jest.spyOn(service, 'applyInventoryAdjustment').mockResolvedValue({} as any);
+
+    await service.submitCycleCount('task-1', {
+      lines: [{ lineId: 'line-agg', countedQty: 7 }],
+    });
+
+    expect(lines[0].expectedQty.equals(decimal(7))).toBe(true);
+    expect(service.applyInventoryAdjustment).not.toHaveBeenCalled();
   });
 
   it('rejects invalid product when adding cycle count lines', async () => {

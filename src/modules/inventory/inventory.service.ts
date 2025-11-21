@@ -449,16 +449,29 @@ export class InventoryService {
     uom: string,
     prismaClient: PrismaService | Prisma.TransactionClient = this.prisma,
   ): Promise<Prisma.Decimal> {
-    const inventory = await prismaClient.inventory.findFirst({
+    const relevantStatuses = [
+      StockStatus.AVAILABLE,
+      StockStatus.RESERVED,
+      StockStatus.PICKING,
+      StockStatus.IN_TRANSIT_INTERNAL,
+      StockStatus.QUARANTINE,
+      StockStatus.BLOCKED,
+    ];
+
+    const inventory = await prismaClient.inventory.groupBy({
       where: {
         productId,
         batchId: batchId ?? null,
         locationId,
         uom,
-        stockStatus: StockStatus.AVAILABLE,
+        stockStatus: { in: relevantStatuses },
       },
+      by: ['productId', 'batchId', 'locationId', 'uom'],
+      _sum: { quantity: true },
     });
 
-    return inventory ? new Prisma.Decimal(inventory.quantity) : new Prisma.Decimal(0);
+    const sumQty = inventory[0]?._sum.quantity ?? new Prisma.Decimal(0);
+
+    return new Prisma.Decimal(sumQty);
   }
 }
