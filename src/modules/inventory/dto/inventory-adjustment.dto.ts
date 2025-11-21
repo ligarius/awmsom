@@ -15,6 +15,10 @@ export class CreateInventoryAdjustmentDto {
   @IsUUID()
   locationId: string;
 
+  @IsOptional()
+  @IsString()
+  uom?: string;
+
   @Type(() => Number)
   @IsNumber()
   newQty: number;
