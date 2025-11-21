@@ -223,6 +223,42 @@ describe('InventoryService', () => {
     );
   });
 
+  it('submits cycle count using predominant non-available stock status', async () => {
+    prisma.cycleCountTask.findUnique.mockResolvedValue({
+      id: 'task-1',
+      status: CycleCountStatus.IN_PROGRESS,
+      warehouseId: 'wh-1',
+    });
+
+    prisma.cycleCountLine.findUnique.mockResolvedValue({
+      id: 'line-1',
+      cycleCountTaskId: 'task-1',
+      expectedQty: decimal(2),
+      productId: 'prod-1',
+      locationId: 'loc-1',
+      uom: 'PCS',
+    });
+
+    prisma.cycleCountLine.update.mockResolvedValue({});
+
+    const helperSpy = jest
+      .spyOn<any, any>(service as any, 'determineCountStockStatus')
+      .mockResolvedValue(StockStatus.PICKING);
+    jest.spyOn(service, 'applyInventoryAdjustment').mockResolvedValue({ id: 'inv-1' } as any);
+
+    await service.submitCycleCount('task-1', {
+      lines: [
+        { lineId: 'line-1', countedQty: 1 },
+      ],
+    });
+
+    expect(helperSpy).toHaveBeenCalledWith('prod-1', undefined, 'loc-1', 'PCS', prisma);
+    expect(service.applyInventoryAdjustment).toHaveBeenCalledWith(
+      expect.objectContaining({ stockStatus: StockStatus.PICKING }),
+      prisma,
+    );
+  });
+
   it('reconciles cycle count using line UOM and updates existing inventory', async () => {
     prisma.cycleCountTask.findUnique.mockResolvedValue({
       id: 'task-1',
@@ -289,6 +325,36 @@ describe('InventoryService', () => {
       }),
     );
     expect(prisma.movementLine.create).toHaveBeenCalled();
+  });
+
+  it('updates reserved inventory without duplicating available stock', async () => {
+    prisma.product.findUnique.mockResolvedValue({ id: 'prod-1', defaultUom: 'PCS' });
+    prisma.location.findUnique.mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
+    prisma.inventory.groupBy.mockResolvedValue([{ stockStatus: StockStatus.RESERVED, _sum: { quantity: decimal(5) } }]);
+    prisma.inventory.findFirst.mockResolvedValue({
+      id: 'inv-res',
+      quantity: decimal(5),
+      stockStatus: StockStatus.RESERVED,
+    });
+    prisma.inventory.update.mockResolvedValue({ id: 'inv-res', quantity: decimal(3), stockStatus: StockStatus.RESERVED });
+    prisma.movementHeader.create.mockResolvedValue({ id: 'mh-1' });
+    prisma.inventoryAdjustment.create.mockResolvedValue({ id: 'adj-1' });
+
+    await service.applyInventoryAdjustment({
+      warehouseId: 'wh-1',
+      productId: 'prod-1',
+      locationId: 'loc-1',
+      newQty: 3,
+      reason: 'Cycle count adjustment',
+    });
+
+    expect(prisma.inventory.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ stockStatus: StockStatus.RESERVED }) }),
+    );
+    expect(prisma.inventory.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'inv-res' }, data: { quantity: decimal(3) } }),
+    );
+    expect(prisma.inventory.create).not.toHaveBeenCalled();
   });
 
   it('rejects negative target quantities', async () => {
