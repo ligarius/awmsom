@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { AdjustmentType, CycleCountStatus, Prisma, StockStatus } from '@prisma/client';
 import { InventoryService } from '../../src/modules/inventory/inventory.service';
 
@@ -7,20 +7,31 @@ const decimal = (value: number) => new Prisma.Decimal(value);
 describe('InventoryService', () => {
   let service: InventoryService;
   let prisma: any;
+  let tenantContext: any;
 
   beforeEach(() => {
+    const warehouseFind = jest.fn();
+    const cycleCountTaskFind = jest.fn();
+    const cycleCountLineFind = jest.fn();
+    const productFind = jest.fn();
+    const batchFind = jest.fn();
+    const locationFind = jest.fn();
+    const inventoryAdjustmentFind = jest.fn();
+
     prisma = {
-      warehouse: { findUnique: jest.fn() },
+      warehouse: { findUnique: warehouseFind, findFirst: warehouseFind },
       cycleCountTask: {
         create: jest.fn(),
-        findUnique: jest.fn(),
+        findUnique: cycleCountTaskFind,
+        findFirst: cycleCountTaskFind,
         update: jest.fn(),
         findMany: jest.fn(),
       },
       cycleCountLine: {
         createMany: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
-        findUnique: jest.fn(),
+        findUnique: cycleCountLineFind,
+        findFirst: cycleCountLineFind,
         update: jest.fn(),
         count: jest.fn().mockResolvedValue(0),
       },
@@ -31,13 +42,16 @@ describe('InventoryService', () => {
         update: jest.fn(),
       },
       product: {
-        findUnique: jest.fn(),
+        findUnique: productFind,
+        findFirst: productFind,
       },
       batch: {
-        findUnique: jest.fn(),
+        findUnique: batchFind,
+        findFirst: batchFind,
       },
       location: {
-        findUnique: jest.fn(),
+        findUnique: locationFind,
+        findFirst: locationFind,
       },
       movementHeader: {
         create: jest.fn(),
@@ -47,13 +61,18 @@ describe('InventoryService', () => {
       },
       inventoryAdjustment: {
         create: jest.fn(),
-        findUnique: jest.fn(),
+        findUnique: inventoryAdjustmentFind,
+        findFirst: inventoryAdjustmentFind,
         findMany: jest.fn(),
       },
       $transaction: jest.fn(async (cb: any) => cb(prisma)),
     };
 
-    service = new InventoryService(prisma as any);
+    tenantContext = {
+      getTenantId: jest.fn().mockReturnValue('tenant-1'),
+    };
+
+    service = new InventoryService(prisma as any, tenantContext as any);
   });
 
   it('creates cycle count task in pending state', async () => {
@@ -87,6 +106,7 @@ describe('InventoryService', () => {
     expect(prisma.inventory.groupBy).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
+          tenantId: 'tenant-1',
           productId: 'prod-1',
           batchId: null,
           locationId: 'loc-1',
@@ -329,6 +349,7 @@ describe('InventoryService', () => {
         uom: 'BOX',
       }),
       prisma,
+      'tenant-1',
     );
     expect(prisma.cycleCountTask.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: CycleCountStatus.COMPLETED }) }),
@@ -396,7 +417,7 @@ describe('InventoryService', () => {
 
     expect(prisma.cycleCountLine.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'line-2' },
+        where: { id: 'line-2', tenantId: 'tenant-1' },
         data: expect.objectContaining({ countedQty: decimal(4) }),
       }),
     );
@@ -434,10 +455,11 @@ describe('InventoryService', () => {
       ],
     });
 
-    expect(helperSpy).toHaveBeenCalledWith('prod-1', undefined, 'loc-1', 'PCS', prisma);
+    expect(helperSpy).toHaveBeenCalledWith('prod-1', undefined, 'loc-1', 'PCS', prisma, 'tenant-1');
     expect(service.applyInventoryAdjustment).toHaveBeenCalledWith(
       expect.objectContaining({ stockStatus: StockStatus.PICKING }),
       prisma,
+      'tenant-1',
     );
   });
 
@@ -477,7 +499,7 @@ describe('InventoryService', () => {
       expect.objectContaining({ where: expect.objectContaining({ uom: 'BOX' }) }),
     );
     expect(prisma.inventory.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'inv-box' }, data: { quantity: decimal(10) } }),
+      expect.objectContaining({ where: { id: 'inv-box', tenantId: 'tenant-1' }, data: { quantity: decimal(10) } }),
     );
     expect(prisma.inventory.create).not.toHaveBeenCalled();
     expect(prisma.movementLine.create).toHaveBeenCalledWith(
@@ -511,6 +533,32 @@ describe('InventoryService', () => {
     expect(prisma.movementLine.create).toHaveBeenCalled();
   });
 
+  it('enforces tenant scoping when listing inventory adjustments', async () => {
+    prisma.inventoryAdjustment.findMany.mockResolvedValue([]);
+
+    await service.listInventoryAdjustments({});
+
+    expect(prisma.inventoryAdjustment.findMany).toHaveBeenCalledWith({ where: { tenantId: 'tenant-1' } });
+  });
+
+  it('rejects adjustments targeting products from another tenant', async () => {
+    prisma.product.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.applyInventoryAdjustment({
+        warehouseId: 'wh-1',
+        productId: 'prod-unknown',
+        locationId: 'loc-1',
+        newQty: 1,
+        reason: 'Invalid tenant',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(prisma.product.findUnique).toHaveBeenCalledWith({
+      where: { id: 'prod-unknown', tenantId: 'tenant-1' },
+    });
+  });
+
   it('updates reserved inventory without duplicating available stock', async () => {
     prisma.product.findUnique.mockResolvedValue({ id: 'prod-1', defaultUom: 'PCS' });
     prisma.location.findUnique.mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
@@ -536,7 +584,7 @@ describe('InventoryService', () => {
       expect.objectContaining({ where: expect.objectContaining({ stockStatus: StockStatus.RESERVED }) }),
     );
     expect(prisma.inventory.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'inv-res' }, data: { quantity: decimal(3) } }),
+      expect.objectContaining({ where: { id: 'inv-res', tenantId: 'tenant-1' }, data: { quantity: decimal(3) } }),
     );
     expect(prisma.inventory.create).not.toHaveBeenCalled();
   });
@@ -576,7 +624,7 @@ describe('InventoryService', () => {
       expect.objectContaining({ where: expect.objectContaining({ uom: 'BOX' }) }),
     );
     expect(prisma.inventory.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'inv-box' }, data: { quantity: decimal(10) } }),
+      expect.objectContaining({ where: { id: 'inv-box', tenantId: 'tenant-1' }, data: { quantity: decimal(10) } }),
     );
     expect(prisma.inventory.create).not.toHaveBeenCalled();
     expect(prisma.movementLine.create).toHaveBeenCalledWith(
@@ -624,7 +672,10 @@ describe('InventoryService', () => {
 
       expect(result).toEqual(expect.objectContaining({ quantity: decimal(5) }));
       expect(prisma.inventory.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ quantity: decimal(5) }) }),
+        expect.objectContaining({
+          where: expect.objectContaining({ tenantId: 'tenant-1' }),
+          data: expect.objectContaining({ quantity: decimal(5) }),
+        }),
       );
     });
 
