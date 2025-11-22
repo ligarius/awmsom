@@ -19,15 +19,22 @@ import { CreateWarehouseDto } from './infrastructure/http/dto/create-warehouse.d
 import { QueryWarehousesDto } from './infrastructure/http/dto/query-warehouses.dto';
 import { UpdateWarehouseDto } from './infrastructure/http/dto/update-warehouse.dto';
 import { WarehouseHttpMapper } from './infrastructure/http/mappers/warehouse.mapper';
+import { TenantContextService } from '../../common/tenant-context.service';
 
 @Controller('warehouses')
 export class WarehousesController {
-  constructor(private readonly warehouseApp: WarehouseApplicationService) {}
+  constructor(
+    private readonly warehouseApp: WarehouseApplicationService,
+    private readonly tenantContext: TenantContextService,
+  ) {}
 
   @Post()
   async create(@Body() dto: CreateWarehouseDto) {
     try {
-      const warehouse = await this.warehouseApp.createWarehouse(dto);
+      const warehouse = await this.warehouseApp.createWarehouse({
+        ...dto,
+        tenantId: this.tenantContext.getTenantId(),
+      });
       return WarehouseHttpMapper.toResponse(warehouse);
     } catch (error) {
       this.handleError(error as Error);

@@ -3,19 +3,26 @@ import { PrismaService } from '../../../../prisma/prisma.service';
 import { Warehouse } from '../../domain/entities/warehouse.entity';
 import { WarehouseRepository } from '../../domain/repositories/warehouse.repository';
 import { CreateWarehouseCommand, WarehouseQuery } from '../../application/dto/warehouse-commands.dto';
+import { TenantContextService } from '../../../../common/tenant-context.service';
 
 @Injectable()
 export class PrismaWarehouseRepository implements WarehouseRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly tenantContext: TenantContextService,
+  ) {}
 
   async create(data: CreateWarehouseCommand): Promise<Warehouse> {
-    const record = await this.prisma.warehouse.create({
+    const tenantId = data.tenantId ?? this.tenantContext.getTenantId();
+    const prisma = this.prisma as any;
+    const record = await prisma.warehouse.create({
       data: {
         code: data.code,
         name: data.name,
         isActive: data.isActive ?? true,
         createdBy: data.createdBy,
         updatedBy: data.updatedBy,
+        tenantId,
       },
     });
 
@@ -23,12 +30,18 @@ export class PrismaWarehouseRepository implements WarehouseRepository {
   }
 
   async findById(id: string): Promise<Warehouse | null> {
-    const record = await this.prisma.warehouse.findUnique({ where: { id } });
+    const prisma = this.prisma as any;
+    const record = await prisma.warehouse.findFirst({
+      where: { id, tenantId: this.tenantContext.getTenantId() },
+    });
     return record ? this.toDomain(record) : null;
   }
 
   async findByCode(code: string): Promise<Warehouse | null> {
-    const record = await this.prisma.warehouse.findUnique({ where: { code } });
+    const prisma = this.prisma as any;
+    const record = await prisma.warehouse.findFirst({
+      where: { code, tenantId: this.tenantContext.getTenantId() },
+    });
     return record ? this.toDomain(record) : null;
   }
 
@@ -36,7 +49,8 @@ export class PrismaWarehouseRepository implements WarehouseRepository {
     id: string,
     data: { name?: string; isActive?: boolean; updatedBy?: string },
   ): Promise<Warehouse> {
-    const record = await this.prisma.warehouse.update({
+    const prisma = this.prisma as any;
+    const record = await prisma.warehouse.update({
       where: { id },
       data,
     });
@@ -47,20 +61,23 @@ export class PrismaWarehouseRepository implements WarehouseRepository {
   async list(query: WarehouseQuery): Promise<{ data: Warehouse[]; total: number }> {
     const { page, limit, code, name, isActive } = query;
     const skip = (page - 1) * limit;
+    const tenantId = this.tenantContext.getTenantId();
     const where = {
+      tenantId,
       ...(code ? { code: { contains: code, mode: 'insensitive' as const } } : {}),
       ...(name ? { name: { contains: name, mode: 'insensitive' as const } } : {}),
       ...(isActive !== undefined ? { isActive } : {}),
     };
 
-    const [records, total] = await this.prisma.$transaction([
-      this.prisma.warehouse.findMany({
+    const prisma = this.prisma as any;
+    const [records, total] = await prisma.$transaction([
+      prisma.warehouse.findMany({
         where,
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.warehouse.count({ where }),
+      prisma.warehouse.count({ where }),
     ]);
 
     return {
@@ -70,7 +87,8 @@ export class PrismaWarehouseRepository implements WarehouseRepository {
   }
 
   async delete(id: string): Promise<void> {
-    await this.prisma.warehouse.update({
+    const prisma = this.prisma as any;
+    await prisma.warehouse.update({
       where: { id },
       data: { isActive: false },
     });
@@ -85,6 +103,7 @@ export class PrismaWarehouseRepository implements WarehouseRepository {
     updatedAt: Date;
     createdBy?: string | null;
     updatedBy?: string | null;
+    tenantId?: string;
   }): Warehouse {
     return new Warehouse(
       record.id,
