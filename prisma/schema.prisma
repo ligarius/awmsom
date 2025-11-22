@@ -1,4 +1,4 @@
-// Prisma schema defining core WMS domain entities for Sprint 2 inbound flows
+// Prisma schema defining core WMS domain entities with multi-tenant support
 
 generator client {
   provider = "prisma-client-js"
@@ -93,18 +93,46 @@ enum PickingTaskStatus {
   CANCELLED
 }
 
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  code      String   @unique
+  plan      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users              User[]
+  warehouses         Warehouse[]
+  products           Product[]
+  batches            Batch[]
+  inventories        Inventory[]
+  inboundReceipts    InboundReceipt[]
+  outboundOrders     OutboundOrder[]
+  pickingTasks       PickingTask[]
+  cycleCountTasks    CycleCountTask[]
+  adjustments        InventoryAdjustment[]
+  handlingUnits      HandlingUnit[]
+  shipments          Shipment[]
+}
+
 model User {
   id           String   @id @default(uuid())
-  email        String   @unique
+  email        String
   passwordHash String
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   createdBy    String?
   updatedBy    String?
+  tenantId     String
 
   roleId String?
   role   Role?   @relation(fields: [roleId], references: [id])
+  tenant Tenant  @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
 }
 
 model Role {
@@ -117,7 +145,8 @@ model Role {
 
 model Warehouse {
   id        String   @id @default(uuid())
-  code      String   @unique
+  tenantId  String
+  code      String
   name      String
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -133,10 +162,15 @@ model Warehouse {
   pickingTasks   PickingTask[]
   handlingUnits  HandlingUnit[]
   shipments      Shipment[]
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
 }
 
 model Location {
   id          String   @id @default(uuid())
+  tenantId    String
   warehouseId String
   code        String
   description String?
@@ -148,6 +182,7 @@ model Location {
   updatedBy   String?
 
   warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
   inventory Inventory[]
   movementLinesFrom MovementLine[] @relation("MovementFrom")
   movementLinesTo   MovementLine[] @relation("MovementTo")
@@ -156,12 +191,14 @@ model Location {
   pickingTaskLinesFrom PickingTaskLine[] @relation("PickingTaskFromLocation")
 
   @@unique([warehouseId, code])
+  @@index([tenantId])
   @@index([code])
 }
 
 model Product {
   id                 String   @id @default(uuid())
-  sku                String   @unique
+  tenantId           String
+  sku                String
   name               String
   requiresBatch      Boolean  @default(false)
   requiresExpiryDate Boolean  @default(false)
@@ -172,6 +209,7 @@ model Product {
   createdBy          String?
   updatedBy          String?
 
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
   batches    Batch[]
   inventory  Inventory[]
   inboundReceiptLines InboundReceiptLine[]
@@ -181,10 +219,14 @@ model Product {
   outboundOrderLines OutboundOrderLine[]
   pickingTaskLines   PickingTaskLine[] @relation("PickingTaskLineProduct")
   handlingUnitLines HandlingUnitLine[]
+
+  @@unique([tenantId, sku])
+  @@index([tenantId])
 }
 
 model Batch {
   id         String      @id @default(uuid())
+  tenantId   String
   productId  String
   batchCode  String
   expiryDate DateTime?
@@ -194,7 +236,8 @@ model Batch {
   createdBy  String?
   updatedBy  String?
 
-  product   Product    @relation(fields: [productId], references: [id])
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  product   Product  @relation(fields: [productId], references: [id])
   inventory Inventory[]
   movementLines MovementLine[]
   inboundReceiptLines InboundReceiptLine[]
@@ -204,10 +247,12 @@ model Batch {
   handlingUnitLines HandlingUnitLine[]
 
   @@index([productId, batchCode])
+  @@index([tenantId])
 }
 
 model Inventory {
   id          String      @id @default(uuid())
+  tenantId    String
   productId   String
   batchId     String?
   locationId  String
@@ -219,16 +264,19 @@ model Inventory {
   createdBy   String?
   updatedBy   String?
 
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
   product  Product  @relation(fields: [productId], references: [id])
   batch    Batch?   @relation(fields: [batchId], references: [id])
   location Location @relation(fields: [locationId], references: [id])
   inventoryAdjustments InventoryAdjustment[]
 
   @@index([productId, batchId, locationId])
+  @@index([tenantId])
 }
 
 model InboundReceipt {
   id          String               @id @default(uuid())
+  tenantId    String
   warehouseId String
   externalRef String?
   status      InboundReceiptStatus
@@ -238,14 +286,17 @@ model InboundReceipt {
   createdBy   String?
   updatedBy   String?
 
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
   warehouse Warehouse @relation(fields: [warehouseId], references: [id])
   lines     InboundReceiptLine[]
 
   @@index([warehouseId, status])
+  @@index([tenantId])
 }
 
 model InboundReceiptLine {
   id                     String      @id @default(uuid())
+  tenantId               String
   inboundReceiptId       String
   productId              String
   expectedQty            Decimal     @db.Decimal(20, 4)
@@ -258,15 +309,18 @@ model InboundReceiptLine {
   createdAt              DateTime    @default(now())
   updatedAt              DateTime    @updatedAt
 
+  tenant         Tenant         @relation(fields: [tenantId], references: [id])
   inboundReceipt InboundReceipt @relation(fields: [inboundReceiptId], references: [id])
   product        Product        @relation(fields: [productId], references: [id])
   batch          Batch?         @relation(fields: [batchId], references: [id])
 
   @@index([inboundReceiptId, productId])
+  @@index([tenantId])
 }
 
 model MovementHeader {
   id           String         @id @default(uuid())
+  tenantId     String
   movementType MovementType
   warehouseId  String
   reference    String?
@@ -275,15 +329,18 @@ model MovementHeader {
   updatedAt    DateTime       @updatedAt
   createdBy    String?
 
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
   warehouse Warehouse @relation(fields: [warehouseId], references: [id])
   lines     MovementLine[]
   inventoryAdjustments InventoryAdjustment[]
 
   @@index([movementType, warehouseId, status])
+  @@index([tenantId])
 }
 
 model MovementLine {
   id               String   @id @default(uuid())
+  tenantId         String
   movementHeaderId String
   productId        String
   batchId          String?
@@ -294,17 +351,20 @@ model MovementLine {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  movementHeader MovementHeader @relation(fields: [movementHeaderId], references: [id])
-  product        Product        @relation(fields: [productId], references: [id])
-  batch          Batch?         @relation(fields: [batchId], references: [id])
-  fromLocation   Location?      @relation("MovementFrom", fields: [fromLocationId], references: [id])
-  toLocation     Location?      @relation("MovementTo", fields: [toLocationId], references: [id])
+  tenant          Tenant         @relation(fields: [tenantId], references: [id])
+  movementHeader  MovementHeader @relation(fields: [movementHeaderId], references: [id])
+  product         Product        @relation(fields: [productId], references: [id])
+  batch           Batch?         @relation(fields: [batchId], references: [id])
+  fromLocation    Location?      @relation("MovementFrom", fields: [fromLocationId], references: [id])
+  toLocation      Location?      @relation("MovementTo", fields: [toLocationId], references: [id])
 
   @@index([movementHeaderId, productId, batchId])
+  @@index([tenantId])
 }
 
 model CycleCountTask {
   id          String            @id @default(uuid())
+  tenantId    String
   warehouseId String
   description String?
   status      CycleCountStatus
@@ -314,14 +374,17 @@ model CycleCountTask {
   startedAt   DateTime?
   completedAt DateTime?
 
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
   warehouse Warehouse        @relation(fields: [warehouseId], references: [id])
   lines     CycleCountLine[]
 
   @@index([warehouseId, status])
+  @@index([tenantId])
 }
 
 model CycleCountLine {
   id               String   @id @default(uuid())
+  tenantId         String
   cycleCountTaskId String
   productId        String
   batchId          String?
@@ -335,16 +398,19 @@ model CycleCountLine {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
+  tenant         Tenant         @relation(fields: [tenantId], references: [id])
   cycleCountTask CycleCountTask @relation(fields: [cycleCountTaskId], references: [id])
   product        Product        @relation(fields: [productId], references: [id])
   batch          Batch?         @relation(fields: [batchId], references: [id])
   location       Location       @relation(fields: [locationId], references: [id])
 
   @@index([cycleCountTaskId, productId, locationId])
+  @@index([tenantId])
 }
 
 model InventoryAdjustment {
   id               String         @id @default(uuid())
+  tenantId         String
   warehouseId      String
   productId        String
   batchId          String?
@@ -361,6 +427,7 @@ model InventoryAdjustment {
   updatedAt        DateTime       @updatedAt
   createdBy        String?
 
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
   warehouse Warehouse       @relation(fields: [warehouseId], references: [id])
   product   Product         @relation(fields: [productId], references: [id])
   batch     Batch?          @relation(fields: [batchId], references: [id])
@@ -369,10 +436,12 @@ model InventoryAdjustment {
   movementHeader MovementHeader? @relation(fields: [movementHeaderId], references: [id])
 
   @@index([warehouseId, productId, locationId, createdAt])
+  @@index([tenantId])
 }
 
 model OutboundOrder {
   id                String              @id @default(uuid())
+  tenantId          String
   warehouseId       String
   externalRef       String?
   customerRef       String?
@@ -382,6 +451,7 @@ model OutboundOrder {
   updatedAt         DateTime            @updatedAt
   createdBy         String?
 
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
   warehouse    Warehouse          @relation(fields: [warehouseId], references: [id])
   lines        OutboundOrderLine[]
   pickingTasks PickingTask[]
@@ -389,10 +459,12 @@ model OutboundOrder {
   shipmentHandlingUnits ShipmentHandlingUnit[]
 
   @@index([warehouseId, status, requestedShipDate])
+  @@index([tenantId])
 }
 
 model OutboundOrderLine {
   id               String   @id @default(uuid())
+  tenantId         String
   outboundOrderId  String
   productId        String
   requestedQty     Decimal  @db.Decimal(20, 4)
@@ -402,16 +474,19 @@ model OutboundOrderLine {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  outboundOrder OutboundOrder @relation(fields: [outboundOrderId], references: [id])
-  product       Product       @relation(fields: [productId], references: [id])
+  tenant           Tenant          @relation(fields: [tenantId], references: [id])
+  outboundOrder    OutboundOrder   @relation(fields: [outboundOrderId], references: [id])
+  product          Product         @relation(fields: [productId], references: [id])
   pickingTaskLines PickingTaskLine[] @relation("OutboundLinePicking")
   handlingUnitLines HandlingUnitLine[]
 
   @@index([outboundOrderId, productId])
+  @@index([tenantId])
 }
 
 model PickingTask {
   id              String            @id @default(uuid())
+  tenantId        String
   warehouseId     String
   outboundOrderId String
   status          PickingTaskStatus
@@ -421,15 +496,18 @@ model PickingTask {
   startedAt       DateTime?
   completedAt     DateTime?
 
+  tenant         Tenant         @relation(fields: [tenantId], references: [id])
   warehouse     Warehouse    @relation(fields: [warehouseId], references: [id])
   outboundOrder OutboundOrder @relation(fields: [outboundOrderId], references: [id])
   lines         PickingTaskLine[]
 
   @@index([warehouseId, outboundOrderId, status])
+  @@index([tenantId])
 }
 
 model PickingTaskLine {
   id                 String   @id @default(uuid())
+  tenantId           String
   pickingTaskId      String
   outboundOrderLineId String
   productId          String
@@ -441,6 +519,7 @@ model PickingTaskLine {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
+  tenant            Tenant           @relation(fields: [tenantId], references: [id])
   pickingTask       PickingTask      @relation(fields: [pickingTaskId], references: [id])
   outboundOrderLine OutboundOrderLine @relation("OutboundLinePicking", fields: [outboundOrderLineId], references: [id])
   product           Product          @relation("PickingTaskLineProduct", fields: [productId], references: [id])
@@ -448,10 +527,12 @@ model PickingTaskLine {
   fromLocation      Location         @relation("PickingTaskFromLocation", fields: [fromLocationId], references: [id])
 
   @@index([pickingTaskId, productId, batchId, fromLocationId])
+  @@index([tenantId])
 }
 
 model HandlingUnit {
   id               String             @id @default(uuid())
+  tenantId         String
   warehouseId      String
   handlingUnitType HandlingUnitType
   code             String
@@ -465,15 +546,18 @@ model HandlingUnit {
   updatedAt        DateTime           @updatedAt
   createdBy        String?
 
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
   warehouse Warehouse @relation(fields: [warehouseId], references: [id])
   lines      HandlingUnitLine[]
   shipments  ShipmentHandlingUnit[]
 
   @@index([warehouseId, code])
+  @@index([tenantId])
 }
 
 model HandlingUnitLine {
   id                  String   @id @default(uuid())
+  tenantId            String
   handlingUnitId      String
   outboundOrderId     String
   outboundOrderLineId String
@@ -484,6 +568,7 @@ model HandlingUnitLine {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
+  tenant            Tenant            @relation(fields: [tenantId], references: [id])
   handlingUnit      HandlingUnit      @relation(fields: [handlingUnitId], references: [id])
   outboundOrder     OutboundOrder     @relation(fields: [outboundOrderId], references: [id])
   outboundOrderLine OutboundOrderLine @relation(fields: [outboundOrderLineId], references: [id])
@@ -491,10 +576,12 @@ model HandlingUnitLine {
   batch             Batch?            @relation(fields: [batchId], references: [id])
 
   @@index([handlingUnitId, outboundOrderId, productId, batchId])
+  @@index([tenantId])
 }
 
 model Shipment {
   id                  String          @id @default(uuid())
+  tenantId            String
   warehouseId         String
   carrierRef          String?
   vehicleRef          String?
@@ -506,23 +593,28 @@ model Shipment {
   updatedAt           DateTime       @updatedAt
   createdBy           String?
 
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
   warehouse            Warehouse              @relation(fields: [warehouseId], references: [id])
   shipmentHandlingUnits ShipmentHandlingUnit[]
 
   @@index([warehouseId, status, scheduledDeparture])
+  @@index([tenantId])
 }
 
 model ShipmentHandlingUnit {
   id              String   @id @default(uuid())
+  tenantId        String
   shipmentId      String
   handlingUnitId  String
   outboundOrderId String
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  tenant        Tenant        @relation(fields: [tenantId], references: [id])
   shipment      Shipment      @relation(fields: [shipmentId], references: [id])
   handlingUnit  HandlingUnit  @relation(fields: [handlingUnitId], references: [id])
   outboundOrder OutboundOrder @relation(fields: [outboundOrderId], references: [id])
 
   @@index([shipmentId, handlingUnitId, outboundOrderId])
+  @@index([tenantId])
 }
