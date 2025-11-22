@@ -10,6 +10,7 @@ import {
   StockStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { TenantContextService } from '../../common/tenant-context.service';
 import { CreateOutboundOrderDto } from './dto/create-outbound-order.dto';
 import { CreatePickingTaskDto } from './dto/create-picking-task.dto';
 import { ConfirmPickingDto } from './dto/confirm-picking.dto';
@@ -25,10 +26,15 @@ import { GetShipmentsFilterDto } from './dto/get-shipments-filter.dto';
 
 @Injectable()
 export class OutboundService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly tenantContext: TenantContextService,
+  ) {}
 
   async createOutboundOrder(dto: CreateOutboundOrderDto) {
-    const warehouse = await this.prisma.warehouse.findUnique({ where: { id: dto.warehouseId } });
+    const tenantId = this.tenantContext.getTenantId();
+
+    const warehouse = await this.prisma.warehouse.findFirst({ where: { id: dto.warehouseId, tenantId } as any });
     if (!warehouse) {
       throw new NotFoundException('Warehouse not found');
     }
@@ -38,7 +44,7 @@ export class OutboundService {
     }
 
     for (const line of dto.lines) {
-      const product = await this.prisma.product.findUnique({ where: { id: line.productId } });
+      const product = await this.prisma.product.findFirst({ where: { id: line.productId, tenantId } as any });
       if (!product) {
         throw new BadRequestException('Product not found');
       }
@@ -46,6 +52,7 @@ export class OutboundService {
 
     return this.prisma.outboundOrder.create({
       data: {
+        tenantId,
         warehouseId: dto.warehouseId,
         externalRef: dto.externalRef,
         customerRef: dto.customerRef,
@@ -54,19 +61,21 @@ export class OutboundService {
         lines: {
           createMany: {
             data: dto.lines.map((line) => ({
+              tenantId,
               productId: line.productId,
               requestedQty: new Prisma.Decimal(line.requestedQty),
               uom: line.uom,
             })),
           },
         },
-      },
+      } as any,
       include: { lines: true },
     });
   }
 
   async listOutboundOrders(filters: GetOutboundOrdersFilterDto) {
-    const where: Prisma.OutboundOrderWhereInput = {};
+    const tenantId = this.tenantContext.getTenantId();
+    const where: Prisma.OutboundOrderWhereInput = { tenantId } as any;
 
     if (filters.warehouseId) {
       where.warehouseId = filters.warehouseId;
@@ -102,8 +111,9 @@ export class OutboundService {
   }
 
   async getOutboundOrder(id: string) {
-    const order = await this.prisma.outboundOrder.findUnique({
-      where: { id },
+    const tenantId = this.tenantContext.getTenantId();
+    const order = await this.prisma.outboundOrder.findFirst({
+      where: { id, tenantId } as any,
       include: { lines: true },
     });
 
@@ -115,8 +125,9 @@ export class OutboundService {
   }
 
   async releaseOutboundOrder(orderId: string) {
-    const order = await this.prisma.outboundOrder.findUnique({
-      where: { id: orderId },
+    const tenantId = this.tenantContext.getTenantId();
+    const order = await this.prisma.outboundOrder.findFirst({
+      where: { id: orderId, tenantId } as any,
       include: { lines: { include: { product: true } } },
     });
 
@@ -145,9 +156,10 @@ export class OutboundService {
         const inventoryRecords = await tx.inventory.findMany({
           where: {
             productId: line.productId,
+            tenantId,
             stockStatus: StockStatus.AVAILABLE,
-            location: { warehouseId: order.warehouseId },
-          },
+            location: { warehouseId: order.warehouseId, tenantId } as any,
+          } as any,
           include: { batch: true },
           orderBy: line.product.requiresExpiryDate
             ? [{ batch: { expiryDate: 'asc' } }, { createdAt: 'asc' }]
@@ -166,7 +178,7 @@ export class OutboundService {
           const allocateQty = availableQty.lt(remaining) ? availableQty : remaining;
           const updatedAvailable = availableQty.minus(allocateQty);
           await tx.inventory.update({
-            where: { id: inventory.id },
+            where: { id: inventory.id, tenantId } as any,
             data: { quantity: updatedAvailable },
           });
 
@@ -175,26 +187,28 @@ export class OutboundService {
               productId: inventory.productId,
               batchId: inventory.batchId,
               locationId: inventory.locationId,
+              tenantId,
               stockStatus: StockStatus.RESERVED,
               uom: inventory.uom,
-            },
+            } as any,
           });
 
           if (reserved) {
             await tx.inventory.update({
-              where: { id: reserved.id },
+              where: { id: reserved.id, tenantId } as any,
               data: { quantity: new Prisma.Decimal(reserved.quantity).plus(allocateQty) },
             });
           } else {
             await tx.inventory.create({
               data: {
+                tenantId,
                 productId: inventory.productId,
                 batchId: inventory.batchId,
                 locationId: inventory.locationId,
                 stockStatus: StockStatus.RESERVED,
                 quantity: allocateQty,
                 uom: inventory.uom,
-              },
+              } as any,
             });
           }
 
@@ -203,12 +217,12 @@ export class OutboundService {
         }
 
         await tx.outboundOrderLine.update({
-          where: { id: line.id },
+          where: { id: line.id, tenantId } as any,
           data: { allocatedQty: allocated },
         });
       }
 
-      const updatedLines = await tx.outboundOrderLine.findMany({ where: { outboundOrderId: orderId } });
+      const updatedLines = await tx.outboundOrderLine.findMany({ where: { outboundOrderId: orderId, tenantId } as any });
       const allAllocated = updatedLines.every((line) => new Prisma.Decimal(line.allocatedQty).eq(line.requestedQty));
       const anyAllocated = updatedLines.some((line) => new Prisma.Decimal(line.allocatedQty).gt(0));
 
@@ -219,7 +233,7 @@ export class OutboundService {
           : OutboundOrderStatus.RELEASED;
 
       return tx.outboundOrder.update({
-        where: { id: orderId },
+        where: { id: orderId, tenantId } as any,
         data: { status: newStatus },
         include: { lines: true },
       });
@@ -227,8 +241,9 @@ export class OutboundService {
   }
 
   async createPickingTask(orderId: string, dto?: CreatePickingTaskDto) {
-    const order = await this.prisma.outboundOrder.findUnique({
-      where: { id: orderId },
+    const tenantId = this.tenantContext.getTenantId();
+    const order = await this.prisma.outboundOrder.findFirst({
+      where: { id: orderId, tenantId } as any,
       include: { lines: true },
     });
 
@@ -247,20 +262,22 @@ export class OutboundService {
     return this.prisma.$transaction(async (tx) => {
       const pickingTask = await tx.pickingTask.create({
         data: {
+          tenantId,
           warehouseId: order.warehouseId,
           outboundOrderId: orderId,
           status: dto?.pickerId ? PickingTaskStatus.ASSIGNED : PickingTaskStatus.CREATED,
           pickerId: dto?.pickerId,
-        },
+        } as any,
       });
 
       for (const line of order.lines) {
         const reservations = await tx.inventory.findMany({
           where: {
             productId: line.productId,
+            tenantId,
             stockStatus: StockStatus.RESERVED,
-            location: { warehouseId: order.warehouseId },
-          },
+            location: { warehouseId: order.warehouseId, tenantId } as any,
+          } as any,
           include: { batch: true },
         });
 
@@ -271,6 +288,7 @@ export class OutboundService {
 
           await tx.pickingTaskLine.create({
             data: {
+              tenantId,
               pickingTaskId: pickingTask.id,
               outboundOrderLineId: line.id,
               productId: reservation.productId,
@@ -278,18 +296,18 @@ export class OutboundService {
               fromLocationId: reservation.locationId,
               quantityToPick: new Prisma.Decimal(reservation.quantity),
               uom: reservation.uom,
-            },
+            } as any,
           });
         }
       }
 
       await tx.outboundOrder.update({
-        where: { id: orderId },
+        where: { id: orderId, tenantId } as any,
         data: { status: OutboundOrderStatus.PICKING },
       });
 
-      const createdTask = await tx.pickingTask.findUnique({
-        where: { id: pickingTask.id },
+      const createdTask = await tx.pickingTask.findFirst({
+        where: { id: pickingTask.id, tenantId } as any,
         include: { lines: true },
       });
 
@@ -302,7 +320,8 @@ export class OutboundService {
   }
 
   async startPickingTask(taskId: string) {
-    const task = await this.prisma.pickingTask.findUnique({ where: { id: taskId } });
+    const tenantId = this.tenantContext.getTenantId();
+    const task = await this.prisma.pickingTask.findFirst({ where: { id: taskId, tenantId } as any });
     if (!task) {
       throw new NotFoundException('Picking task not found');
     }
@@ -312,14 +331,15 @@ export class OutboundService {
     }
 
     return this.prisma.pickingTask.update({
-      where: { id: taskId },
+      where: { id: taskId, tenantId } as any,
       data: { status: PickingTaskStatus.IN_PROGRESS, startedAt: new Date() },
     });
   }
 
   async confirmPickingTask(taskId: string, dto: ConfirmPickingDto) {
-    const task = await this.prisma.pickingTask.findUnique({
-      where: { id: taskId },
+    const tenantId = this.tenantContext.getTenantId();
+    const task = await this.prisma.pickingTask.findFirst({
+      where: { id: taskId, tenantId } as any,
       include: { lines: true, outboundOrder: { include: { lines: true } } },
     });
 
@@ -334,11 +354,12 @@ export class OutboundService {
     return this.prisma.$transaction(async (tx) => {
       const movementHeader = await tx.movementHeader.create({
         data: {
+          tenantId,
           movementType: MovementType.OUTBOUND_SHIPMENT,
           warehouseId: task.warehouseId,
           status: MovementStatus.COMPLETED,
           reference: task.outboundOrderId,
-        },
+        } as any,
       });
 
       for (const dtoLine of dto.lines) {
@@ -360,9 +381,10 @@ export class OutboundService {
             productId: taskLine.productId,
             batchId: taskLine.batchId,
             locationId: taskLine.fromLocationId,
+            tenantId,
             stockStatus: StockStatus.RESERVED,
             uom: taskLine.uom,
-          },
+          } as any,
         });
 
         if (!reservation) {
@@ -375,22 +397,23 @@ export class OutboundService {
         }
 
         await tx.inventory.update({
-          where: { id: reservation.id },
+          where: { id: reservation.id, tenantId } as any,
           data: { quantity: reservationQty.minus(qtyPicked) },
         });
 
         await tx.pickingTaskLine.update({
-          where: { id: taskLine.id },
+          where: { id: taskLine.id, tenantId } as any,
           data: { quantityPicked: currentPicked.plus(qtyPicked) },
         });
 
         await tx.outboundOrderLine.update({
-          where: { id: taskLine.outboundOrderLineId },
+          where: { id: taskLine.outboundOrderLineId, tenantId } as any,
           data: { pickedQty: new Prisma.Decimal(taskLine.quantityPicked).plus(qtyPicked) },
         });
 
         await tx.movementLine.create({
           data: {
+            tenantId,
             movementHeaderId: movementHeader.id,
             productId: taskLine.productId,
             batchId: taskLine.batchId,
@@ -398,15 +421,17 @@ export class OutboundService {
             toLocationId: null,
             quantity: qtyPicked,
             uom: taskLine.uom,
-          },
+          } as any,
         });
       }
 
-      const updatedLines = await tx.pickingTaskLine.findMany({ where: { pickingTaskId: taskId } });
+      const updatedLines = await tx.pickingTaskLine.findMany({
+        where: { pickingTaskId: taskId, tenantId } as any,
+      });
       const allPicked = updatedLines.every((line) => new Prisma.Decimal(line.quantityPicked).eq(line.quantityToPick));
 
       const updatedTask = await tx.pickingTask.update({
-        where: { id: taskId },
+        where: { id: taskId, tenantId } as any,
         data: {
           status: allPicked ? PickingTaskStatus.COMPLETED : task.status,
           completedAt: allPicked ? new Date() : undefined,
@@ -414,7 +439,9 @@ export class OutboundService {
         include: { outboundOrder: { include: { lines: true } }, lines: true },
       });
 
-      const orderLines = await tx.outboundOrderLine.findMany({ where: { outboundOrderId: task.outboundOrderId } });
+      const orderLines = await tx.outboundOrderLine.findMany({
+        where: { outboundOrderId: task.outboundOrderId, tenantId } as any,
+      });
       const allOrderPicked = orderLines.every((line) => new Prisma.Decimal(line.pickedQty).eq(line.requestedQty));
       const anyPicked = orderLines.some((line) => new Prisma.Decimal(line.pickedQty).gt(0));
 
@@ -425,7 +452,7 @@ export class OutboundService {
           : task.outboundOrder.status;
 
       await tx.outboundOrder.update({
-        where: { id: task.outboundOrderId },
+        where: { id: task.outboundOrderId, tenantId } as any,
         data: { status: newOrderStatus },
       });
 
@@ -434,7 +461,8 @@ export class OutboundService {
   }
 
   async listPickingTasks(filters: GetPickingTasksFilterDto) {
-    const where: Prisma.PickingTaskWhereInput = {};
+    const tenantId = this.tenantContext.getTenantId();
+    const where: Prisma.PickingTaskWhereInput = { tenantId } as any;
 
     if (filters.warehouseId) {
       where.warehouseId = filters.warehouseId;
@@ -456,8 +484,9 @@ export class OutboundService {
   }
 
   async getPickingTask(id: string) {
-    const task = await this.prisma.pickingTask.findUnique({
-      where: { id },
+    const tenantId = this.tenantContext.getTenantId();
+    const task = await this.prisma.pickingTask.findFirst({
+      where: { id, tenantId } as any,
       include: { lines: true, outboundOrder: true },
     });
 
@@ -481,7 +510,8 @@ export class OutboundService {
   }
 
   async createHandlingUnit(dto: CreateHandlingUnitDto) {
-    const warehouse = await this.prisma.warehouse.findUnique({ where: { id: dto.warehouseId } });
+    const tenantId = this.tenantContext.getTenantId();
+    const warehouse = await this.prisma.warehouse.findFirst({ where: { id: dto.warehouseId, tenantId } as any });
     if (!warehouse) {
       throw new NotFoundException('Warehouse not found');
     }
@@ -490,6 +520,7 @@ export class OutboundService {
 
     return this.prisma.handlingUnit.create({
       data: {
+        tenantId,
         warehouseId: dto.warehouseId,
         handlingUnitType: dto.handlingUnitType ?? HandlingUnitType.BOX,
         code,
@@ -499,21 +530,22 @@ export class OutboundService {
         length: dto.length !== undefined ? new Prisma.Decimal(dto.length) : undefined,
         width: dto.width !== undefined ? new Prisma.Decimal(dto.width) : undefined,
         height: dto.height !== undefined ? new Prisma.Decimal(dto.height) : undefined,
-      },
+      } as any,
     });
   }
 
   async addItemsToHandlingUnit(handlingUnitId: string, dto: AddItemsToHandlingUnitDto) {
-    const handlingUnit = await this.prisma.handlingUnit.findUnique({
-      where: { id: handlingUnitId },
+    const tenantId = this.tenantContext.getTenantId();
+    const handlingUnit = await this.prisma.handlingUnit.findFirst({
+      where: { id: handlingUnitId, tenantId } as any,
     });
 
     if (!handlingUnit) {
       throw new NotFoundException('Handling unit not found');
     }
 
-    const order = await this.prisma.outboundOrder.findUnique({
-      where: { id: dto.outboundOrderId },
+    const order = await this.prisma.outboundOrder.findFirst({
+      where: { id: dto.outboundOrderId, tenantId } as any,
       include: { lines: true },
     });
 
@@ -537,7 +569,7 @@ export class OutboundService {
         }
 
         const existing = await tx.handlingUnitLine.aggregate({
-          where: { outboundOrderLineId: item.outboundOrderLineId },
+          where: { outboundOrderLineId: item.outboundOrderLineId, tenantId } as any,
           _sum: { quantity: true },
         });
 
@@ -555,6 +587,7 @@ export class OutboundService {
 
         await tx.handlingUnitLine.create({
           data: {
+            tenantId,
             handlingUnitId: handlingUnit.id,
             outboundOrderId: dto.outboundOrderId,
             outboundOrderLineId: item.outboundOrderLineId,
@@ -562,12 +595,12 @@ export class OutboundService {
             batchId: item.batchId,
             quantity: requestedQty,
             uom: item.uom,
-          },
+          } as any,
         });
       }
 
-      const refreshed = await tx.handlingUnit.findUnique({
-        where: { id: handlingUnit.id },
+      const refreshed = await tx.handlingUnit.findFirst({
+        where: { id: handlingUnit.id, tenantId } as any,
         include: { lines: true },
       });
 
@@ -576,7 +609,8 @@ export class OutboundService {
   }
 
   async listHandlingUnits(filters: GetHandlingUnitsFilterDto) {
-    const where: Prisma.HandlingUnitWhereInput = {};
+    const tenantId = this.tenantContext.getTenantId();
+    const where: Prisma.HandlingUnitWhereInput = { tenantId } as any;
 
     if (filters.warehouseId) {
       where.warehouseId = filters.warehouseId;
@@ -602,8 +636,9 @@ export class OutboundService {
   }
 
   async getHandlingUnit(id: string) {
-    const hu = await this.prisma.handlingUnit.findUnique({
-      where: { id },
+    const tenantId = this.tenantContext.getTenantId();
+    const hu = await this.prisma.handlingUnit.findFirst({
+      where: { id, tenantId } as any,
       include: { lines: true },
     });
 
@@ -615,35 +650,38 @@ export class OutboundService {
   }
 
   async createShipment(dto: CreateShipmentDto) {
-    const warehouse = await this.prisma.warehouse.findUnique({ where: { id: dto.warehouseId } });
+    const tenantId = this.tenantContext.getTenantId();
+    const warehouse = await this.prisma.warehouse.findFirst({ where: { id: dto.warehouseId, tenantId } as any });
     if (!warehouse) {
       throw new NotFoundException('Warehouse not found');
     }
 
     return this.prisma.shipment.create({
       data: {
+        tenantId,
         warehouseId: dto.warehouseId,
         carrierRef: dto.carrierRef,
         vehicleRef: dto.vehicleRef,
         routeRef: dto.routeRef,
         status: ShipmentStatus.PLANNED,
         scheduledDeparture: dto.scheduledDeparture ? new Date(dto.scheduledDeparture) : undefined,
-      },
+      } as any,
     });
   }
 
   async assignHandlingUnitsToShipment(shipmentId: string, dto: AssignHandlingUnitsToShipmentDto) {
-    const shipment = await this.prisma.shipment.findUnique({ where: { id: shipmentId } });
+    const tenantId = this.tenantContext.getTenantId();
+    const shipment = await this.prisma.shipment.findFirst({ where: { id: shipmentId, tenantId } as any });
     if (!shipment) {
       throw new NotFoundException('Shipment not found');
     }
 
-    if (([ShipmentStatus.CANCELLED, ShipmentStatus.DISPATCHED] as ShipmentStatus[]).includes(shipment.status)) {
+    if (([ShipmentStatus.CANCELLED, ShipmentStatus.DISPATCHED] as ShipmentStatus[]).includes(shipment.status as any)) {
       throw new BadRequestException('Shipment cannot be modified in its current status');
     }
 
     const handlingUnits = (await this.prisma.handlingUnit.findMany({
-      where: { id: { in: dto.handlingUnitIds } },
+      where: { id: { in: dto.handlingUnitIds }, tenantId } as any,
       include: { lines: true },
     })) as any[];
 
@@ -657,7 +695,7 @@ export class OutboundService {
 
     return this.prisma.$transaction(async (tx) => {
       const existingLinks = (await tx.shipmentHandlingUnit.findMany({
-        where: { shipmentId },
+        where: { shipmentId, tenantId } as any,
       })) as any[];
       const existingKey = new Set(
         existingLinks.map((link) => `${link.handlingUnitId}-${link.outboundOrderId}`),
@@ -679,10 +717,11 @@ export class OutboundService {
 
           await tx.shipmentHandlingUnit.create({
             data: {
+              tenantId,
               shipmentId,
               handlingUnitId: hu.id,
               outboundOrderId: orderId,
-            },
+            } as any,
           });
         }
       }
@@ -690,7 +729,7 @@ export class OutboundService {
       const newStatus = shipment.status === ShipmentStatus.PLANNED ? ShipmentStatus.LOADING : shipment.status;
 
       return tx.shipment.update({
-        where: { id: shipmentId },
+        where: { id: shipmentId, tenantId } as any,
         data: { status: newStatus },
         include: { shipmentHandlingUnits: true },
       });
@@ -698,8 +737,9 @@ export class OutboundService {
   }
 
   async dispatchShipment(shipmentId: string, dto: DispatchShipmentDto) {
-    const shipment = await this.prisma.shipment.findUnique({
-      where: { id: shipmentId },
+    const tenantId = this.tenantContext.getTenantId();
+    const shipment = await this.prisma.shipment.findFirst({
+      where: { id: shipmentId, tenantId } as any,
       include: { shipmentHandlingUnits: true },
     });
 
@@ -707,7 +747,7 @@ export class OutboundService {
       throw new NotFoundException('Shipment not found');
     }
 
-    if (!([ShipmentStatus.PLANNED, ShipmentStatus.LOADING] as ShipmentStatus[]).includes(shipment.status)) {
+    if (!([ShipmentStatus.PLANNED, ShipmentStatus.LOADING] as ShipmentStatus[]).includes(shipment.status as any)) {
       throw new BadRequestException('Shipment cannot be dispatched from its current status');
     }
 
@@ -717,24 +757,26 @@ export class OutboundService {
 
     return this.prisma.$transaction(async (tx) => {
       const handlingUnits = await tx.handlingUnit.findMany({
-        where: { shipments: { some: { shipmentId } } },
+        where: { shipments: { some: { shipmentId, tenantId } }, tenantId } as any,
         include: { lines: true },
       });
 
       // Inventory quantities were reduced during picking confirmation; dispatch logs the physical exit for traceability.
       const movementHeader = await tx.movementHeader.create({
         data: {
+          tenantId,
           movementType: MovementType.OUTBOUND_SHIPMENT,
           warehouseId: shipment.warehouseId,
           status: MovementStatus.COMPLETED,
           reference: shipment.id,
-        },
+        } as any,
       });
 
       for (const hu of handlingUnits) {
         for (const line of hu.lines) {
           await tx.movementLine.create({
             data: {
+              tenantId,
               movementHeaderId: movementHeader.id,
               productId: line.productId,
               batchId: line.batchId,
@@ -742,13 +784,13 @@ export class OutboundService {
               toLocationId: null,
               quantity: new Prisma.Decimal(line.quantity),
               uom: line.uom,
-            },
+            } as any,
           });
         }
       }
 
       const updatedShipment = await tx.shipment.update({
-        where: { id: shipmentId },
+        where: { id: shipmentId, tenantId } as any,
         data: {
           status: ShipmentStatus.DISPATCHED,
           actualDeparture: dto.actualDeparture ? new Date(dto.actualDeparture) : new Date(),
@@ -761,7 +803,8 @@ export class OutboundService {
   }
 
   async listShipments(filters: GetShipmentsFilterDto) {
-    const where: Prisma.ShipmentWhereInput = {};
+    const tenantId = this.tenantContext.getTenantId();
+    const where: Prisma.ShipmentWhereInput = { tenantId } as any;
 
     if (filters.warehouseId) {
       where.warehouseId = filters.warehouseId;
@@ -797,8 +840,9 @@ export class OutboundService {
   }
 
   async getShipment(id: string) {
-    const shipment = await this.prisma.shipment.findUnique({
-      where: { id },
+    const tenantId = this.tenantContext.getTenantId();
+    const shipment = await this.prisma.shipment.findFirst({
+      where: { id, tenantId } as any,
       include: {
         shipmentHandlingUnits: {
           include: {
