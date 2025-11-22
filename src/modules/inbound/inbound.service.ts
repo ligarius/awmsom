@@ -128,6 +128,10 @@ export class InboundService {
         throw new BadRequestException('Receipt cannot be confirmed in its current status');
       }
 
+      if (!receipt.lines.length) {
+        throw new BadRequestException('Receipt has no lines to confirm');
+      }
+
       const destinationLocation = await tx.location.findUnique({
         where: { id: dto.toLocationId },
       });
@@ -141,6 +145,9 @@ export class InboundService {
       }
 
       if (dto.lines) {
+        if (!dto.lines.length) {
+          throw new BadRequestException('At least one line must be provided');
+        }
         const lineIds = new Set<string>();
         for (const line of dto.lines) {
           if (lineIds.has(line.lineId)) {
@@ -156,6 +163,10 @@ export class InboundService {
         batchCode?: string;
         expiryDate?: string;
       }[] = dto.lines ?? receipt.lines.map((line) => ({ lineId: line.id }));
+
+      if (!linePayloads.length) {
+        throw new BadRequestException('No lines to process');
+      }
 
       const movementLines: Prisma.MovementLineCreateWithoutMovementHeaderInput[] = [];
 
@@ -243,6 +254,10 @@ export class InboundService {
           quantity: receiveQty,
           uom: receiptLine.uom,
         });
+      }
+
+      if (!movementLines.length) {
+        throw new BadRequestException('Cannot create movement without lines');
       }
 
       const updatedLines = await tx.inboundReceiptLine.findMany({
