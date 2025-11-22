@@ -186,6 +186,42 @@ describe('InventoryService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('rejects duplicate cycle count lines in the same request', async () => {
+    prisma.cycleCountTask.findUnique.mockResolvedValue({
+      id: 'task-1',
+      status: CycleCountStatus.PENDING,
+      warehouseId: 'wh-1',
+    });
+
+    await expect(
+      service.addCycleCountLines('task-1', {
+        lines: [
+          { productId: 'prod-1', locationId: 'loc-1', uom: 'PCS' },
+          { productId: 'prod-1', locationId: 'loc-1', uom: 'PCS' },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.cycleCountLine.count).not.toHaveBeenCalled();
+  });
+
+  it('rejects cycle count lines that already exist for the task', async () => {
+    prisma.cycleCountTask.findUnique.mockResolvedValue({
+      id: 'task-1',
+      status: CycleCountStatus.PENDING,
+      warehouseId: 'wh-1',
+    });
+    prisma.cycleCountLine.count.mockResolvedValue(1);
+
+    await expect(
+      service.addCycleCountLines('task-1', {
+        lines: [{ productId: 'prod-1', locationId: 'loc-1', uom: 'PCS' }],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.cycleCountLine.createMany).not.toHaveBeenCalled();
+  });
+
   it('rejects cross-warehouse location when adding cycle count lines', async () => {
     prisma.cycleCountTask.findUnique.mockResolvedValue({
       id: 'task-1',
