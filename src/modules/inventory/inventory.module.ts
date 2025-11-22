@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../../prisma/prisma.module';
+import { ConfigModule } from '../config/config.module';
 import { InventoryController } from './inventory.controller';
 import { InventoryService } from './inventory.service';
 import { BlockLotUseCase } from './application/use-cases/block-lot.use-case';
@@ -14,7 +15,7 @@ import { PrismaLotRepository } from './infrastructure/persistence/prisma-lot.rep
 import { PrismaInventoryMovementRepository } from './infrastructure/persistence/prisma-inventory-movement.repository';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, ConfigModule],
   controllers: [InventoryController],
   providers: [
     InventoryService,

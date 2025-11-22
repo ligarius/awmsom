@@ -14,6 +14,7 @@ import { IntegrationModule } from './modules/integration/integration.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { MonitoringModule } from './modules/monitoring/monitoring.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
+import { ConfigModule as TenantConfigModule } from './modules/config/config.module';
 import { TenantGuard } from './guards/tenant.guard';
 
 @Module({
@@ -26,6 +27,7 @@ import { TenantGuard } from './guards/tenant.guard';
     WarehousesModule,
     LocationsModule,
     ProductsModule,
+    TenantConfigModule,
     InventoryModule,
     InboundModule,
     OutboundModule,

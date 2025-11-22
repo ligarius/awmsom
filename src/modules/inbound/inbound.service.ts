@@ -13,6 +13,7 @@ import { AddInboundReceiptLineDto } from './dto/add-inbound-receipt-line.dto';
 import { ConfirmInboundReceiptDto } from './dto/confirm-inbound-receipt.dto';
 import { GetInboundReceiptsFilterDto } from './dto/get-inbound-receipts-filter.dto';
 import { TenantContextService } from '../../common/tenant-context.service';
+import { ConfigService } from '../config/config.service';
 
 @Injectable()
 export class InboundService {
@@ -20,6 +21,7 @@ export class InboundService {
     private readonly prisma: PrismaService,
     private readonly inventoryService: InventoryService,
     private readonly tenantContext: TenantContextService,
+    private readonly configService: ConfigService,
   ) {}
 
   async createReceipt(dto: CreateInboundReceiptDto) {
@@ -123,6 +125,8 @@ export class InboundService {
   async confirmReceipt(id: string, dto: ConfirmInboundReceiptDto) {
     const tenantId = this.tenantContext.getTenantId();
 
+    await this.configService.getTenantConfig(tenantId);
+
     return this.prisma.$transaction(async (tx) => {
       const receipt = (await tx.inboundReceipt.findFirst({
         where: { id, tenantId } as any,
@@ -183,7 +187,7 @@ export class InboundService {
         throw new BadRequestException('No lines to process');
       }
 
-      const movementLines: Prisma.MovementLineCreateWithoutMovementHeaderInput[] = [];
+      const movementLines: any[] = [];
 
       for (const payload of linePayloads) {
         const receiptLine = receipt.lines.find((line: any) => line.id === payload.lineId);
@@ -196,10 +200,6 @@ export class InboundService {
           payload.receivedQty === undefined || payload.receivedQty === null
             ? pendingQty
             : new Prisma.Decimal(payload.receivedQty);
-
-        if (receiveQty.gt(pendingQty)) {
-          throw new BadRequestException('Received quantity exceeds pending quantity');
-        }
 
         if (receiveQty.lte(0)) {
           throw new BadRequestException('Received quantity must be greater than zero');
@@ -216,6 +216,31 @@ export class InboundService {
 
         if (receiptLine.product.requiresExpiryDate && !expiryDate) {
           throw new BadRequestException('Expiry date is required for this product');
+        }
+
+        const policy = await this.configService.resolveInventoryPolicy(
+          tenantId,
+          receipt.warehouseId,
+          receiptLine.productId,
+        );
+
+        const expectedQty = new Prisma.Decimal(receiptLine.expectedQty);
+        const newTotalQty = new Prisma.Decimal(receiptLine.receivedQty).plus(receiveQty);
+        const maxOverPct = policy?.maxOverReceiptPct ?? 0;
+        const maxAllowed = expectedQty.mul(1 + maxOverPct / 100);
+        if (newTotalQty.gt(maxAllowed)) {
+          throw new BadRequestException('Received quantity exceeds allowed tolerance');
+        }
+
+        const maxUnderPct = policy?.maxUnderReceiptPct;
+        const remainingAfter = expectedQty.minus(newTotalQty);
+        if (
+          maxUnderPct !== null &&
+          maxUnderPct !== undefined &&
+          remainingAfter.gt(0) &&
+          remainingAfter.gt(expectedQty.mul(maxUnderPct / 100))
+        ) {
+          throw new BadRequestException('Received quantity below allowed tolerance');
         }
 
         let batchId: string | null = null;
@@ -263,6 +288,7 @@ export class InboundService {
         );
 
         movementLines.push({
+          tenantId,
           product: { connect: { id: receiptLine.productId } },
           batch: batchId ? { connect: { id: batchId } } : undefined,
           fromLocation: undefined,
