@@ -52,7 +52,12 @@ describe('InboundService', () => {
 
     tenantContext = { getTenantId: jest.fn().mockReturnValue('tenant-1') } as any;
 
-    service = new InboundService(prisma, inventoryService, tenantContext as any);
+    const configService = {
+      getTenantConfig: jest.fn().mockResolvedValue({}),
+      resolveInventoryPolicy: jest.fn().mockResolvedValue(null),
+    };
+
+    service = new InboundService(prisma, inventoryService, tenantContext as any, configService as any);
   });
 
   it('creates a receipt in DRAFT status', async () => {

@@ -72,7 +72,12 @@ describe('InventoryService', () => {
       getTenantId: jest.fn().mockReturnValue('tenant-1'),
     };
 
-    service = new InventoryService(prisma as any, tenantContext as any);
+    const configService = {
+      getTenantConfig: jest.fn().mockResolvedValue({ enableCycleCounting: true, cycleCountDefaultFreqDays: null }),
+      getInventoryPolicies: jest.fn().mockResolvedValue([]),
+    };
+
+    service = new InventoryService(prisma as any, tenantContext as any, configService as any);
   });
 
   it('creates cycle count task in pending state', async () => {

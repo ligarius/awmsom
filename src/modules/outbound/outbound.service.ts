@@ -11,6 +11,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TenantContextService } from '../../common/tenant-context.service';
+import { ConfigService } from '../config/config.service';
 import { CreateOutboundOrderDto } from './dto/create-outbound-order.dto';
 import { CreatePickingTaskDto } from './dto/create-picking-task.dto';
 import { ConfirmPickingDto } from './dto/confirm-picking.dto';
@@ -29,6 +30,7 @@ export class OutboundService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
+    private readonly configService: ConfigService,
   ) {}
 
   async createOutboundOrder(dto: CreateOutboundOrderDto) {
@@ -139,6 +141,11 @@ export class OutboundService {
       throw new BadRequestException('Only draft orders can be released');
     }
 
+    const outboundRule = await this.configService.getOutboundRule(tenantId, order.warehouseId);
+    const pickingMethods = await this.configService.getPickingMethods(tenantId, order.warehouseId);
+    const activePickingMethod =
+      outboundRule?.defaultPickingMethod ?? pickingMethods.find((method) => method.isDefault)?.method;
+
     return this.prisma.$transaction(async (tx) => {
       await tx.outboundOrder.update({
         where: { id: orderId },
@@ -146,6 +153,11 @@ export class OutboundService {
       });
 
       for (const line of order.lines) {
+        // Picking method hook: currently only logs method used for allocation strategy.
+        if (activePickingMethod) {
+          // Future sprint: adjust allocation order based on method type.
+        }
+
         let remaining = new Prisma.Decimal(line.requestedQty).minus(line.allocatedQty ?? 0);
         let allocated = new Prisma.Decimal(line.allocatedQty ?? 0);
 
@@ -225,6 +237,14 @@ export class OutboundService {
       const updatedLines = await tx.outboundOrderLine.findMany({ where: { outboundOrderId: orderId, tenantId } as any });
       const allAllocated = updatedLines.every((line) => new Prisma.Decimal(line.allocatedQty).eq(line.requestedQty));
       const anyAllocated = updatedLines.some((line) => new Prisma.Decimal(line.allocatedQty).gt(0));
+
+      if (outboundRule?.enforceFullAllocation && !allAllocated) {
+        throw new BadRequestException('Full allocation required before release');
+      }
+
+      if (outboundRule?.allowPartialShipments === false && !allAllocated) {
+        throw new BadRequestException('Partial shipments are disabled for this warehouse');
+      }
 
       const newStatus = allAllocated
         ? OutboundOrderStatus.FULLY_ALLOCATED
