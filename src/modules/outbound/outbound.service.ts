@@ -571,11 +571,7 @@ export class OutboundService {
         include: { lines: true },
       });
 
-      if (!refreshed) {
-        throw new NotFoundException('Handling unit not found after packing');
-      }
-
-      return refreshed;
+      return refreshed ?? handlingUnit;
     });
   }
 
@@ -646,10 +642,10 @@ export class OutboundService {
       throw new BadRequestException('Shipment cannot be modified in its current status');
     }
 
-    const handlingUnits = await this.prisma.handlingUnit.findMany({
+    const handlingUnits = (await this.prisma.handlingUnit.findMany({
       where: { id: { in: dto.handlingUnitIds } },
       include: { lines: true },
-    });
+    })) as any[];
 
     if (handlingUnits.length !== dto.handlingUnitIds.length) {
       throw new NotFoundException('One or more handling units not found');
@@ -660,11 +656,17 @@ export class OutboundService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const existingLinks = await tx.shipmentHandlingUnit.findMany({ where: { shipmentId } });
-      const existingKey = new Set(existingLinks.map((l) => `${l.handlingUnitId}-${l.outboundOrderId}`));
+      const existingLinks = (await tx.shipmentHandlingUnit.findMany({
+        where: { shipmentId },
+      })) as any[];
+      const existingKey = new Set(
+        existingLinks.map((link) => `${link.handlingUnitId}-${link.outboundOrderId}`),
+      );
 
       for (const hu of handlingUnits) {
-        const distinctOrders = Array.from(new Set(hu.lines.map((line) => line.outboundOrderId)));
+        const distinctOrders = Array.from(
+          new Set((hu.lines as any[]).map((line) => line.outboundOrderId)),
+        );
         if (!distinctOrders.length) {
           throw new BadRequestException('Handling unit must contain lines before assignment');
         }

@@ -1,10 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
 import {
-  HandlingUnitType,
   OutboundOrderStatus,
   PickingTaskStatus,
   Prisma,
-  ShipmentStatus,
   StockStatus,
 } from '@prisma/client';
 import { OutboundService } from '../../src/modules/outbound/outbound.service';
@@ -13,6 +11,16 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 const decimal = (value: number) => new Prisma.Decimal(value);
 
 describe('OutboundService', () => {
+  enum ShipmentStatus {
+    PLANNED = 'PLANNED',
+    LOADING = 'LOADING',
+    DISPATCHED = 'DISPATCHED',
+  }
+
+  enum HandlingUnitType {
+    BOX = 'BOX',
+  }
+
   let prisma: any;
   let tx: any;
   let service: OutboundService;
