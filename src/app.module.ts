@@ -9,6 +9,7 @@ import { ProductsModule } from './modules/products/products.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { InboundModule } from './modules/inbound/inbound.module';
 import { OutboundModule } from './modules/outbound/outbound.module';
+import { IntegrationModule } from './modules/integration/integration.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { OutboundModule } from './modules/outbound/outbound.module';
     InventoryModule,
     InboundModule,
     OutboundModule,
+    IntegrationModule,
   ],
 })
 export class AppModule {}
