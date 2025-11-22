@@ -10,6 +10,8 @@ import { InventoryModule } from './modules/inventory/inventory.module';
 import { InboundModule } from './modules/inbound/inbound.module';
 import { OutboundModule } from './modules/outbound/outbound.module';
 import { IntegrationModule } from './modules/integration/integration.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { MonitoringModule } from './modules/monitoring/monitoring.module';
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { IntegrationModule } from './modules/integration/integration.module';
     InboundModule,
     OutboundModule,
     IntegrationModule,
+    AuditModule,
+    MonitoringModule,
   ],
 })
 export class AppModule {}
