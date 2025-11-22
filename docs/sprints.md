@@ -21,11 +21,13 @@ Esta tabla resume el estado de los sprints del WMS, los objetivos principales y 
    - Recepción de compras con estados y confirmación que generan movimientos de entrada.
    - Conteos cíclicos, ajustes y selección FEFO para reservas y picking.
    - Liberación de órdenes de salida y tareas de picking con trazabilidad de stock.
+5. **Sprint 5 – Empaque y expedición outbound** (Completado e integrado en rama principal)
+   - Empaquetado posterior al picking mediante unidades de manejo (handling units) asociadas a líneas de órdenes.
+   - Planeación y carga de embarques con unidades asignadas por almacén y despacho que registra movimientos `OUTBOUND_SHIPMENT`.
+   - Validaciones de alineación de bodega/orden y límites de cantidad empacada respecto a lo pickeado.
 
 ## Sprints en progreso
-- **Sprint 5 – Integraciones y monitoreo**
-  - Conectores para sistemas externos de compras/ventas, colas de eventos y métricas de observabilidad.
-  - Endpoints de auditoría y tablero de salud unificado.
+- Ninguno; el alcance comprometido está integrado en la rama principal.
 
 ## Sprints pendientes
 - **Sprint 6 – Optimización operativa**
