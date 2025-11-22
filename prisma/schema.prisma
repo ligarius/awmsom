@@ -85,6 +85,24 @@ enum OutboundOrderStatus {
   CANCELLED
 }
 
+enum PickingMethodType {
+  ORDER
+  WAVE
+  BATCH
+  ZONE
+}
+
+enum ZoneType {
+  RECEIVING
+  PICKING
+  RESERVE
+  QUARANTINE
+  SHIPPING
+  RETURNS
+  SCRAP
+  OTHER
+}
+
 enum PickingTaskStatus {
   CREATED
   ASSIGNED
@@ -107,13 +125,27 @@ model Tenant {
   products           Product[]
   batches            Batch[]
   inventories        Inventory[]
+  locations          Location[]
   inboundReceipts    InboundReceipt[]
+  inboundReceiptLines InboundReceiptLine[]
   outboundOrders     OutboundOrder[]
+  outboundOrderLines OutboundOrderLine[]
   pickingTasks       PickingTask[]
+  pickingTaskLines   PickingTaskLine[]
   cycleCountTasks    CycleCountTask[]
+  cycleCountLines    CycleCountLine[]
   adjustments        InventoryAdjustment[]
+  movementHeaders    MovementHeader[]
+  movementLines      MovementLine[]
   handlingUnits      HandlingUnit[]
+  handlingUnitLines  HandlingUnitLine[]
   shipments          Shipment[]
+  shipmentHandlingUnits ShipmentHandlingUnit[]
+  tenantConfigs      TenantConfig[]
+  pickingMethodConfigs PickingMethodConfig[]
+  warehouseZoneConfigs WarehouseZoneConfig[]
+  inventoryPolicies  InventoryPolicy[]
+  outboundRules      OutboundRule[]
 }
 
 model User {
@@ -162,6 +194,10 @@ model Warehouse {
   pickingTasks   PickingTask[]
   handlingUnits  HandlingUnit[]
   shipments      Shipment[]
+  pickingMethodConfigs PickingMethodConfig[]
+  warehouseZoneConfigs WarehouseZoneConfig[]
+  inventoryPolicies InventoryPolicy[]
+  outboundRules   OutboundRule[]
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@unique([tenantId, code])
@@ -219,6 +255,7 @@ model Product {
   outboundOrderLines OutboundOrderLine[]
   pickingTaskLines   PickingTaskLine[] @relation("PickingTaskLineProduct")
   handlingUnitLines HandlingUnitLine[]
+  inventoryPolicies InventoryPolicy[]
 
   @@unique([tenantId, sku])
   @@index([tenantId])
@@ -617,4 +654,109 @@ model ShipmentHandlingUnit {
 
   @@index([shipmentId, handlingUnitId, outboundOrderId])
   @@index([tenantId])
+}
+
+model TenantConfig {
+  id                        String   @id @default(uuid())
+  tenantId                  String
+  tenant                    Tenant   @relation(fields: [tenantId], references: [id])
+
+  defaultUom                String?
+  defaultStockStatus        String?
+  defaultBatchPolicy        String?
+  allowNegativeStock        Boolean  @default(false)
+  enableCycleCounting       Boolean  @default(true)
+  cycleCountDefaultFreqDays Int?
+
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+model PickingMethodConfig {
+  id           String           @id @default(uuid())
+  tenantId     String
+  tenant       Tenant           @relation(fields: [tenantId], references: [id])
+  warehouseId  String?
+  warehouse    Warehouse?       @relation(fields: [warehouseId], references: [id])
+
+  method       PickingMethodType
+  isDefault    Boolean          @default(false)
+  isActive     Boolean          @default(true)
+  notes        String?
+
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, warehouseId])
+}
+
+model WarehouseZoneConfig {
+  id           String   @id @default(uuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  warehouseId  String
+  warehouse    Warehouse @relation(fields: [warehouseId], references: [id])
+
+  code         String
+  name         String
+  zoneType     ZoneType
+  isActive     Boolean  @default(true)
+
+  allowInbound  Boolean @default(false)
+  allowPicking  Boolean @default(false)
+  allowStorage  Boolean @default(false)
+  allowReturns  Boolean @default(false)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, warehouseId])
+}
+
+model InventoryPolicy {
+  id                   String   @id @default(uuid())
+  tenantId             String
+  tenant               Tenant   @relation(fields: [tenantId], references: [id])
+
+  warehouseId          String?
+  warehouse            Warehouse? @relation(fields: [warehouseId], references: [id])
+
+  productId            String?
+  product              Product?  @relation(fields: [productId], references: [id])
+
+  maxOverReceiptPct    Float?
+  maxUnderReceiptPct   Float?
+  cycleCountFreqDays   Int?
+  maxInventoryVariance Float?
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, warehouseId])
+  @@index([tenantId, productId])
+}
+
+model OutboundRule {
+  id                      String   @id @default(uuid())
+  tenantId                String
+  tenant                  Tenant   @relation(fields: [tenantId], references: [id])
+
+  warehouseId             String?
+  warehouse               Warehouse? @relation(fields: [warehouseId], references: [id])
+
+  allowPartialShipments   Boolean @default(true)
+  enforceFullAllocation   Boolean @default(false)
+  defaultPickingMethod    PickingMethodType?
+  defaultShipmentStrategy String?
+
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, warehouseId])
 }

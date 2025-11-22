@@ -1,25 +1,38 @@
 export enum StockStatus {
   AVAILABLE = 'AVAILABLE',
-  DAMAGED = 'DAMAGED',
   RESERVED = 'RESERVED',
+  PICKING = 'PICKING',
+  IN_TRANSIT_INTERNAL = 'IN_TRANSIT_INTERNAL',
+  QUARANTINE = 'QUARANTINE',
+  SCRAP = 'SCRAP',
+  BLOCKED = 'BLOCKED',
 }
 
 export enum OutboundOrderStatus {
   DRAFT = 'DRAFT',
+  RELEASED = 'RELEASED',
   PARTIALLY_ALLOCATED = 'PARTIALLY_ALLOCATED',
   FULLY_ALLOCATED = 'FULLY_ALLOCATED',
-  SHIPPED = 'SHIPPED',
+  PICKING = 'PICKING',
+  PARTIALLY_PICKED = 'PARTIALLY_PICKED',
+  PICKED = 'PICKED',
+  CANCELLED = 'CANCELLED',
 }
 
 export enum PickingTaskStatus {
-  OPEN = 'OPEN',
+  CREATED = 'CREATED',
+  ASSIGNED = 'ASSIGNED',
   IN_PROGRESS = 'IN_PROGRESS',
   COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
 }
 
 export enum HandlingUnitType {
   BOX = 'BOX',
   PALLET = 'PALLET',
+  PARCEL = 'PARCEL',
+  CONTAINER = 'CONTAINER',
+  OTHER = 'OTHER',
 }
 
 export enum ShipmentStatus {
@@ -32,11 +45,14 @@ export enum ShipmentStatus {
 export enum MovementStatus {
   PENDING = 'PENDING',
   COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
 }
 
 export enum MovementType {
+  INBOUND_RECEIPT = 'INBOUND_RECEIPT',
+  INTERNAL_TRANSFER = 'INTERNAL_TRANSFER',
+  ADJUSTMENT = 'ADJUSTMENT',
   OUTBOUND_SHIPMENT = 'OUTBOUND_SHIPMENT',
-  OUTBOUND = 'OUTBOUND',
 }
 
 export enum AdjustmentType {
@@ -49,11 +65,32 @@ export enum CycleCountStatus {
   PENDING = 'PENDING',
   IN_PROGRESS = 'IN_PROGRESS',
   COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
 }
 
 export enum InboundReceiptStatus {
   DRAFT = 'DRAFT',
+  PARTIALLY_RECEIVED = 'PARTIALLY_RECEIVED',
   RECEIVED = 'RECEIVED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum PickingMethodType {
+  ORDER = 'ORDER',
+  WAVE = 'WAVE',
+  BATCH = 'BATCH',
+  ZONE = 'ZONE',
+}
+
+export enum ZoneType {
+  RECEIVING = 'RECEIVING',
+  PICKING = 'PICKING',
+  RESERVE = 'RESERVE',
+  QUARANTINE = 'QUARANTINE',
+  SHIPPING = 'SHIPPING',
+  RETURNS = 'RETURNS',
+  SCRAP = 'SCRAP',
+  OTHER = 'OTHER',
 }
 
 class Decimal {
@@ -123,6 +160,10 @@ class Decimal {
   abs() {
     return new Decimal(Math.abs(this.value));
   }
+
+  mul(input: any) {
+    return new Decimal(this.value * this.asNumber(input));
+  }
 }
 
 export const Prisma = {
@@ -154,9 +195,22 @@ export class PrismaClient {
   inboundReceiptLine: any;
   cycleCountTask: any;
   cycleCountLine: any;
+  tenantConfig: any;
+  pickingMethodConfig: any;
+  warehouseZoneConfig: any;
+  inventoryPolicy: any;
+  outboundRule: any;
   $transaction: any;
 
   constructor() {
     this.$transaction = jest.fn();
+  }
+
+  $connect() {
+    return Promise.resolve();
+  }
+
+  $disconnect() {
+    return Promise.resolve();
   }
 }

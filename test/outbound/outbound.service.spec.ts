@@ -59,7 +59,12 @@ describe('OutboundService', () => {
       $transaction: jest.fn((cb) => cb(tx)),
     } as unknown as PrismaService;
 
-    service = new OutboundService(prisma, tenantContext as any);
+    const configService = {
+      getOutboundRule: jest.fn().mockResolvedValue(null),
+      getPickingMethods: jest.fn().mockResolvedValue([]),
+    };
+
+    service = new OutboundService(prisma, tenantContext as any, configService as any);
   });
 
   it('creates an outbound order in DRAFT with lines', async () => {

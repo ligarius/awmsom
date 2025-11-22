@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { AdjustmentType, CycleCountStatus, MovementStatus, MovementType, Prisma, StockStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TenantContextService } from '../../common/tenant-context.service';
+import { ConfigService } from '../config/config.service';
 import {
   AddCycleCountLinesDto,
   CreateCycleCountTaskDto,
@@ -14,6 +15,7 @@ export class InventoryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
+    private readonly configService: ConfigService,
   ) {}
 
   health() {
@@ -23,11 +25,16 @@ export class InventoryService {
 
   async createCycleCountTask(dto: CreateCycleCountTaskDto) {
     const tenantId = this.tenantContext.getTenantId();
+    const tenantConfig = await this.configService.getTenantConfig(tenantId);
     const warehouse = await this.prisma.warehouse.findFirst({
       where: { id: dto.warehouseId, tenantId } as any,
     });
     if (!warehouse) {
       throw new NotFoundException('Warehouse not found');
+    }
+
+    if (!tenantConfig.enableCycleCounting) {
+      throw new BadRequestException('Cycle counting disabled for this tenant');
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -42,6 +49,30 @@ export class InventoryService {
 
       if (dto.lines?.length) {
         await this.addCycleCountLines(task.id, { lines: dto.lines }, tx, tenantId);
+      } else {
+        const policies = await this.configService.getInventoryPolicies(tenantId, dto.warehouseId);
+        const hasPolicyFrequency = policies.some((policy) => policy.cycleCountFreqDays !== null);
+        const shouldSuggest = hasPolicyFrequency || tenantConfig.cycleCountDefaultFreqDays !== null;
+
+        if (shouldSuggest) {
+          const inventoryCandidates = await tx.inventory.findMany({
+            where: { tenantId, location: { warehouseId: dto.warehouseId, tenantId } as any } as any,
+            include: { batch: true },
+            take: 50,
+          });
+
+          const lines = inventoryCandidates.map((inv) => ({
+            productId: inv.productId,
+            batchId: inv.batchId ?? undefined,
+            locationId: inv.locationId,
+            uom: inv.uom,
+            expectedQty: Number(inv.quantity),
+          }));
+
+          if (lines.length) {
+            await this.addCycleCountLines(task.id, { lines }, tx, tenantId);
+          }
+        }
       }
 
       return task;
