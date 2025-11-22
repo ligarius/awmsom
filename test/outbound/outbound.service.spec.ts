@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import {
   OutboundOrderStatus,
   PickingTaskStatus,
@@ -24,45 +24,47 @@ describe('OutboundService', () => {
   let prisma: any;
   let tx: any;
   let service: OutboundService;
+  let tenantContext: { getTenantId: jest.Mock };
 
   beforeEach(() => {
+    tenantContext = { getTenantId: jest.fn().mockReturnValue('tenant-1') };
     tx = {
       outboundOrder: { update: jest.fn() },
       outboundOrderLine: { update: jest.fn(), findMany: jest.fn() },
       inventory: { findMany: jest.fn(), update: jest.fn(), findFirst: jest.fn(), create: jest.fn() },
-      pickingTask: { create: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
+      pickingTask: { create: jest.fn(), findUnique: jest.fn(), update: jest.fn(), findFirst: jest.fn() },
       pickingTaskLine: { create: jest.fn(), findMany: jest.fn(), update: jest.fn() },
       movementHeader: { create: jest.fn() },
       movementLine: { create: jest.fn() },
       handlingUnitLine: { aggregate: jest.fn(), create: jest.fn() },
-      handlingUnit: { findUnique: jest.fn(), findMany: jest.fn() },
+      handlingUnit: { findUnique: jest.fn(), findMany: jest.fn(), findFirst: jest.fn() },
       shipmentHandlingUnit: { findMany: jest.fn(), create: jest.fn() },
       shipment: { update: jest.fn() },
     } as unknown as PrismaService;
 
     prisma = {
-      warehouse: { findUnique: jest.fn() },
-      product: { findUnique: jest.fn() },
-      outboundOrder: { create: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
+      warehouse: { findUnique: jest.fn(), findFirst: jest.fn() },
+      product: { findUnique: jest.fn(), findFirst: jest.fn() },
+      outboundOrder: { create: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn(), findFirst: jest.fn() },
       outboundOrderLine: { findMany: jest.fn() },
       inventory: { findMany: jest.fn(), update: jest.fn(), findFirst: jest.fn(), create: jest.fn() },
-      pickingTask: { create: jest.fn(), findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn() },
+      pickingTask: { create: jest.fn(), findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn(), findFirst: jest.fn() },
       pickingTaskLine: { findMany: jest.fn() },
       movementHeader: { create: jest.fn() },
       movementLine: { create: jest.fn() },
-      handlingUnit: { create: jest.fn(), findUnique: jest.fn(), findMany: jest.fn() },
+      handlingUnit: { create: jest.fn(), findUnique: jest.fn(), findMany: jest.fn(), findFirst: jest.fn() },
       handlingUnitLine: { aggregate: jest.fn(), create: jest.fn(), findMany: jest.fn() },
-      shipment: { create: jest.fn(), findUnique: jest.fn(), findMany: jest.fn() },
+      shipment: { create: jest.fn(), findUnique: jest.fn(), findMany: jest.fn(), findFirst: jest.fn() },
       shipmentHandlingUnit: { findMany: jest.fn(), create: jest.fn() },
       $transaction: jest.fn((cb) => cb(tx)),
     } as unknown as PrismaService;
 
-    service = new OutboundService(prisma);
+    service = new OutboundService(prisma, tenantContext as any);
   });
 
   it('creates an outbound order in DRAFT with lines', async () => {
-    (prisma.warehouse.findUnique as jest.Mock).mockResolvedValue({ id: 'wh-1' });
-    (prisma.product.findUnique as jest.Mock).mockResolvedValue({ id: 'prod-1' });
+    (prisma.warehouse.findFirst as jest.Mock).mockResolvedValue({ id: 'wh-1' });
+    (prisma.product.findFirst as jest.Mock).mockResolvedValue({ id: 'prod-1' });
     (prisma.outboundOrder.create as jest.Mock).mockResolvedValue({
       id: 'ord-1',
       status: OutboundOrderStatus.DRAFT,
@@ -80,7 +82,7 @@ describe('OutboundService', () => {
   });
 
   it('releases an order and allocates fully', async () => {
-    (prisma.outboundOrder.findUnique as jest.Mock).mockResolvedValue({
+    (prisma.outboundOrder.findFirst as jest.Mock).mockResolvedValue({
       id: 'ord-1',
       warehouseId: 'wh-1',
       status: OutboundOrderStatus.DRAFT,
@@ -121,8 +123,18 @@ describe('OutboundService', () => {
     expect(result.status).toBe(OutboundOrderStatus.FULLY_ALLOCATED);
   });
 
+  it('throws when outbound order does not belong to tenant', async () => {
+    (prisma.outboundOrder.findFirst as jest.Mock).mockResolvedValue(null);
+
+    await expect(service.getOutboundOrder('ord-404')).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.outboundOrder.findFirst).toHaveBeenCalledWith({
+      where: { id: 'ord-404', tenantId: 'tenant-1' },
+      include: { lines: true },
+    });
+  });
+
   it('creates picking task based on reserved inventory', async () => {
-    (prisma.outboundOrder.findUnique as jest.Mock).mockResolvedValue({
+    (prisma.outboundOrder.findFirst as jest.Mock).mockResolvedValue({
       id: 'ord-1',
       warehouseId: 'wh-1',
       status: OutboundOrderStatus.FULLY_ALLOCATED,
@@ -135,7 +147,7 @@ describe('OutboundService', () => {
     ]);
     (tx.pickingTaskLine.create as jest.Mock).mockResolvedValue({});
     (tx.outboundOrder.update as jest.Mock).mockResolvedValue({});
-    (tx.pickingTask.findUnique as jest.Mock).mockResolvedValue({ id: 'task-1', lines: [] });
+    (tx.pickingTask.findFirst as jest.Mock).mockResolvedValue({ id: 'task-1', lines: [] });
 
     const task = await service.createPickingTask('ord-1', { pickerId: 'picker-1' });
 
@@ -144,7 +156,7 @@ describe('OutboundService', () => {
   });
 
   it('confirms picking lines and closes task', async () => {
-    (prisma.pickingTask.findUnique as jest.Mock).mockResolvedValue({
+    (prisma.pickingTask.findFirst as jest.Mock).mockResolvedValue({
       id: 'task-1',
       warehouseId: 'wh-1',
       outboundOrderId: 'ord-1',
@@ -184,20 +196,20 @@ describe('OutboundService', () => {
 
     expect(result.status).toBe(PickingTaskStatus.COMPLETED);
     expect(tx.inventory.update).toHaveBeenCalledWith({
-      where: { id: 'res-1' },
+      where: { id: 'res-1', tenantId: 'tenant-1' },
       data: { quantity: decimal(3) },
     });
     expect(tx.pickingTaskLine.update).toHaveBeenCalled();
   });
 
   it('throws when starting completed picking task', async () => {
-    (prisma.pickingTask.findUnique as jest.Mock).mockResolvedValue({ id: 'task-1', status: PickingTaskStatus.COMPLETED });
+    (prisma.pickingTask.findFirst as jest.Mock).mockResolvedValue({ id: 'task-1', status: PickingTaskStatus.COMPLETED });
 
     await expect(service.startPickingTask('task-1')).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('creates a handling unit', async () => {
-    (prisma.warehouse.findUnique as jest.Mock).mockResolvedValue({ id: 'wh-1' });
+    (prisma.warehouse.findFirst as jest.Mock).mockResolvedValue({ id: 'wh-1' });
     (prisma.handlingUnit.create as jest.Mock).mockResolvedValue({ id: 'hu-1', code: 'HU-1' });
 
     const hu = await service.createHandlingUnit({
@@ -211,8 +223,8 @@ describe('OutboundService', () => {
   });
 
   it('adds items to a handling unit when within picked quantity', async () => {
-    (prisma.handlingUnit.findUnique as jest.Mock).mockResolvedValue({ id: 'hu-1', warehouseId: 'wh-1' });
-    (prisma.outboundOrder.findUnique as jest.Mock).mockResolvedValue({
+    (prisma.handlingUnit.findFirst as jest.Mock).mockResolvedValue({ id: 'hu-1', warehouseId: 'wh-1' });
+    (prisma.outboundOrder.findFirst as jest.Mock).mockResolvedValue({
       id: 'ord-1',
       warehouseId: 'wh-1',
       lines: [
@@ -225,7 +237,7 @@ describe('OutboundService', () => {
     });
     (tx.handlingUnitLine.aggregate as jest.Mock).mockResolvedValue({ _sum: { quantity: decimal(2) } });
     (tx.handlingUnitLine.create as jest.Mock).mockResolvedValue({});
-    (tx.handlingUnit.findUnique as jest.Mock).mockResolvedValue({ id: 'hu-1', lines: [] });
+    (tx.handlingUnit.findFirst as jest.Mock).mockResolvedValue({ id: 'hu-1', lines: [] });
 
     const result = await service.addItemsToHandlingUnit('hu-1', {
       outboundOrderId: 'ord-1',
@@ -238,9 +250,17 @@ describe('OutboundService', () => {
     expect(tx.handlingUnitLine.create).toHaveBeenCalled();
   });
 
+  it('rejects adding items to handling unit from another tenant', async () => {
+    (prisma.handlingUnit.findFirst as jest.Mock).mockResolvedValue(null);
+
+    await expect(
+      service.addItemsToHandlingUnit('hu-1', { outboundOrderId: 'ord-1', items: [] }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
   it('rejects packing more than picked quantity', async () => {
-    (prisma.handlingUnit.findUnique as jest.Mock).mockResolvedValue({ id: 'hu-1', warehouseId: 'wh-1' });
-    (prisma.outboundOrder.findUnique as jest.Mock).mockResolvedValue({
+    (prisma.handlingUnit.findFirst as jest.Mock).mockResolvedValue({ id: 'hu-1', warehouseId: 'wh-1' });
+    (prisma.outboundOrder.findFirst as jest.Mock).mockResolvedValue({
       id: 'ord-1',
       warehouseId: 'wh-1',
       lines: [{ id: 'line-1', pickedQty: decimal(1), productId: 'prod-1' }],
@@ -256,13 +276,13 @@ describe('OutboundService', () => {
   });
 
   it('creates shipment and assigns handling units', async () => {
-    (prisma.warehouse.findUnique as jest.Mock).mockResolvedValue({ id: 'wh-1' });
+    (prisma.warehouse.findFirst as jest.Mock).mockResolvedValue({ id: 'wh-1' });
     (prisma.shipment.create as jest.Mock).mockResolvedValue({ id: 'sh-1', status: ShipmentStatus.PLANNED });
 
     const shipment = await service.createShipment({ warehouseId: 'wh-1' });
     expect(shipment.status).toBe(ShipmentStatus.PLANNED);
 
-    (prisma.shipment.findUnique as jest.Mock).mockResolvedValue({ id: 'sh-1', warehouseId: 'wh-1', status: ShipmentStatus.PLANNED });
+    (prisma.shipment.findFirst as jest.Mock).mockResolvedValue({ id: 'sh-1', warehouseId: 'wh-1', status: ShipmentStatus.PLANNED });
     (prisma.handlingUnit.findMany as jest.Mock).mockResolvedValue([
       { id: 'hu-1', warehouseId: 'wh-1', lines: [{ outboundOrderId: 'ord-1' }] },
     ]);
@@ -275,7 +295,7 @@ describe('OutboundService', () => {
   });
 
   it('does not dispatch shipment without handling units', async () => {
-    (prisma.shipment.findUnique as jest.Mock).mockResolvedValue({
+    (prisma.shipment.findFirst as jest.Mock).mockResolvedValue({
       id: 'sh-1',
       status: ShipmentStatus.PLANNED,
       warehouseId: 'wh-1',
@@ -286,7 +306,7 @@ describe('OutboundService', () => {
   });
 
   it('dispatches shipment with movement creation', async () => {
-    (prisma.shipment.findUnique as jest.Mock).mockResolvedValue({
+    (prisma.shipment.findFirst as jest.Mock).mockResolvedValue({
       id: 'sh-1',
       status: ShipmentStatus.LOADING,
       warehouseId: 'wh-1',
