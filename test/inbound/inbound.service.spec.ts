@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import {
   InboundReceiptStatus,
   MovementStatus,
@@ -17,29 +17,30 @@ describe('InboundService', () => {
   let tx: any;
   let inventoryService: jest.Mocked<InventoryService>;
   let service: InboundService;
+  let tenantContext: { getTenantId: jest.Mock };
 
   beforeEach(() => {
     tx = {
-      inboundReceipt: { findUnique: jest.fn(), update: jest.fn() },
+      inboundReceipt: { findFirst: jest.fn(), update: jest.fn() },
       inboundReceiptLine: { update: jest.fn(), findMany: jest.fn() },
-      warehouse: { findUnique: jest.fn() },
+      warehouse: { findFirst: jest.fn() },
       batch: { findFirst: jest.fn(), create: jest.fn() },
-      location: { findUnique: jest.fn() },
+      location: { findFirst: jest.fn() },
       movementHeader: { create: jest.fn() },
-      product: { findUnique: jest.fn() },
+      product: { findFirst: jest.fn() },
     } as unknown as PrismaService;
 
     prisma = {
-      warehouse: { findUnique: jest.fn() },
-      inboundReceipt: { create: jest.fn(), findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn() },
+      warehouse: { findFirst: jest.fn() },
+      inboundReceipt: { create: jest.fn(), findFirst: jest.fn(), update: jest.fn(), findMany: jest.fn() },
       inboundReceiptLine: {
         create: jest.fn(),
         update: jest.fn(),
         findMany: jest.fn(),
       },
-      product: { findUnique: jest.fn() },
+      product: { findFirst: jest.fn() },
       batch: { findFirst: jest.fn(), create: jest.fn() },
-      location: { findUnique: jest.fn() },
+      location: { findFirst: jest.fn() },
       inventory: { findFirst: jest.fn(), update: jest.fn(), create: jest.fn() },
       movementHeader: { create: jest.fn() },
       $transaction: jest.fn((cb) => cb(tx)),
@@ -49,24 +50,30 @@ describe('InboundService', () => {
       increaseStock: jest.fn(),
     } as unknown as jest.Mocked<InventoryService>;
 
-    service = new InboundService(prisma, inventoryService);
+    tenantContext = { getTenantId: jest.fn().mockReturnValue('tenant-1') } as any;
+
+    service = new InboundService(prisma, inventoryService, tenantContext as any);
   });
 
   it('creates a receipt in DRAFT status', async () => {
-    (prisma.warehouse.findUnique as jest.Mock).mockResolvedValue({ id: 'wh-1' });
+    (prisma.warehouse.findFirst as jest.Mock).mockResolvedValue({ id: 'wh-1' });
     (prisma.inboundReceipt.create as jest.Mock).mockResolvedValue({ id: 'rec-1', status: InboundReceiptStatus.DRAFT });
 
     const result = await service.createReceipt({ warehouseId: 'wh-1', externalRef: 'OC-123' });
 
     expect(result).toEqual(expect.objectContaining({ status: InboundReceiptStatus.DRAFT }));
     expect(prisma.inboundReceipt.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ warehouseId: 'wh-1', status: InboundReceiptStatus.DRAFT }),
+      data: expect.objectContaining({ tenantId: 'tenant-1', warehouseId: 'wh-1', status: InboundReceiptStatus.DRAFT }),
     });
   });
 
   it('adds a line to a draft receipt', async () => {
-    (prisma.inboundReceipt.findUnique as jest.Mock).mockResolvedValue({ id: 'rec-1', status: InboundReceiptStatus.DRAFT });
-    (prisma.product.findUnique as jest.Mock).mockResolvedValue({ id: 'prod-1', requiresBatch: false, requiresExpiryDate: false });
+    (prisma.inboundReceipt.findFirst as jest.Mock).mockResolvedValue({
+      id: 'rec-1',
+      status: InboundReceiptStatus.DRAFT,
+      lines: [],
+    });
+    (prisma.product.findFirst as jest.Mock).mockResolvedValue({ id: 'prod-1', requiresBatch: false, requiresExpiryDate: false });
     (prisma.inboundReceiptLine.create as jest.Mock).mockResolvedValue({ id: 'line-1' });
 
     const line = await service.addLine('rec-1', {
@@ -80,7 +87,7 @@ describe('InboundService', () => {
   });
 
   it('rejects adding a line when receipt is already received', async () => {
-    (prisma.inboundReceipt.findUnique as jest.Mock).mockResolvedValue({ id: 'rec-1', status: InboundReceiptStatus.RECEIVED });
+    (prisma.inboundReceipt.findFirst as jest.Mock).mockResolvedValue({ id: 'rec-1', status: InboundReceiptStatus.RECEIVED, lines: [] });
 
     await expect(
       service.addLine('rec-1', { productId: 'prod-1', expectedQty: 1, uom: 'EA' }),
@@ -88,7 +95,7 @@ describe('InboundService', () => {
   });
 
   it('confirms receipt and updates inventory for product without batch', async () => {
-    (tx.inboundReceipt.findUnique as jest.Mock).mockResolvedValue({
+    (tx.inboundReceipt.findFirst as jest.Mock).mockResolvedValue({
       id: 'rec-1',
       warehouseId: 'wh-1',
       status: InboundReceiptStatus.DRAFT,
@@ -108,7 +115,7 @@ describe('InboundService', () => {
       ],
       warehouse: {},
     });
-    (tx.location.findUnique as jest.Mock).mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
+    (tx.location.findFirst as jest.Mock).mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
     (tx.inboundReceiptLine.findMany as jest.Mock).mockResolvedValue([
       {
         id: 'line-1',
@@ -147,7 +154,7 @@ describe('InboundService', () => {
   });
 
   it('rejects confirmation when receipt has no lines', async () => {
-    (tx.inboundReceipt.findUnique as jest.Mock).mockResolvedValue({
+    (tx.inboundReceipt.findFirst as jest.Mock).mockResolvedValue({
       id: 'rec-empty',
       warehouseId: 'wh-1',
       status: InboundReceiptStatus.DRAFT,
@@ -162,11 +169,11 @@ describe('InboundService', () => {
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
 
-    expect(tx.location.findUnique).not.toHaveBeenCalled();
+    expect(tx.location.findFirst).not.toHaveBeenCalled();
   });
 
   it('throws when received quantity exceeds pending amount', async () => {
-    (tx.inboundReceipt.findUnique as jest.Mock).mockResolvedValue({
+    (tx.inboundReceipt.findFirst as jest.Mock).mockResolvedValue({
       id: 'rec-1',
       warehouseId: 'wh-1',
       status: InboundReceiptStatus.DRAFT,
@@ -187,7 +194,7 @@ describe('InboundService', () => {
       warehouse: {},
     });
 
-    (tx.location.findUnique as jest.Mock).mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
+    (tx.location.findFirst as jest.Mock).mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
 
     await expect(
       service.confirmReceipt('rec-1', {
@@ -198,7 +205,7 @@ describe('InboundService', () => {
   });
 
   it('rejects confirmation when provided lines array is empty', async () => {
-    (tx.inboundReceipt.findUnique as jest.Mock).mockResolvedValue({
+    (tx.inboundReceipt.findFirst as jest.Mock).mockResolvedValue({
       id: 'rec-1',
       warehouseId: 'wh-1',
       status: InboundReceiptStatus.DRAFT,
@@ -218,7 +225,7 @@ describe('InboundService', () => {
       ],
       warehouse: {},
     });
-    (tx.location.findUnique as jest.Mock).mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
+    (tx.location.findFirst as jest.Mock).mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
 
     await expect(
       service.confirmReceipt('rec-1', {
@@ -229,7 +236,7 @@ describe('InboundService', () => {
   });
 
   it('creates or reuses batch for products requiring it during confirmation', async () => {
-    (tx.inboundReceipt.findUnique as jest.Mock).mockResolvedValue({
+    (tx.inboundReceipt.findFirst as jest.Mock).mockResolvedValue({
       id: 'rec-2',
       warehouseId: 'wh-1',
       status: InboundReceiptStatus.DRAFT,
@@ -249,7 +256,7 @@ describe('InboundService', () => {
       ],
       warehouse: {},
     });
-    (tx.location.findUnique as jest.Mock).mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
+    (tx.location.findFirst as jest.Mock).mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
     (tx.batch.findFirst as jest.Mock).mockResolvedValue(null);
     (tx.batch.create as jest.Mock).mockResolvedValue({ id: 'batch-1' });
     (tx.inboundReceiptLine.update as jest.Mock).mockResolvedValue({});
@@ -283,7 +290,7 @@ describe('InboundService', () => {
   });
 
   it('rolls back receipt confirmation when movement creation fails', async () => {
-    (tx.inboundReceipt.findUnique as jest.Mock).mockResolvedValue({
+    (tx.inboundReceipt.findFirst as jest.Mock).mockResolvedValue({
       id: 'rec-3',
       warehouseId: 'wh-1',
       status: InboundReceiptStatus.DRAFT,
@@ -303,7 +310,7 @@ describe('InboundService', () => {
       ],
       warehouse: {},
     });
-    (tx.location.findUnique as jest.Mock).mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
+    (tx.location.findFirst as jest.Mock).mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
     (tx.inboundReceiptLine.update as jest.Mock).mockResolvedValue({});
     (tx.inboundReceiptLine.findMany as jest.Mock).mockResolvedValue([
       { id: 'line-3', expectedQty: decimal(2), receivedQty: decimal(2) },
@@ -323,5 +330,31 @@ describe('InboundService', () => {
       tx,
     );
     expect(tx.inboundReceipt.update).not.toHaveBeenCalled();
+  });
+
+  it('does not allow retrieving a receipt from another tenant', async () => {
+    (prisma.inboundReceipt.findFirst as jest.Mock).mockResolvedValue(null);
+
+    await expect(service.getReceipt('rec-foreign')).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(prisma.inboundReceipt.findFirst).toHaveBeenCalledWith({
+      where: { id: 'rec-foreign', tenantId: 'tenant-1' },
+      include: { lines: { where: { tenantId: 'tenant-1' } } },
+    });
+  });
+
+  it('rejects confirmation for a receipt belonging to another tenant', async () => {
+    (tx.inboundReceipt.findFirst as jest.Mock).mockResolvedValue(null);
+
+    await expect(
+      service.confirmReceipt('rec-foreign', {
+        toLocationId: 'loc-1',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(tx.inboundReceipt.findFirst).toHaveBeenCalledWith({
+      where: { id: 'rec-foreign', tenantId: 'tenant-1' },
+      include: expect.anything(),
+    });
   });
 });
