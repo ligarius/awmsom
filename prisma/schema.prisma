@@ -50,10 +50,30 @@ enum MovementType {
   INBOUND_RECEIPT
   INTERNAL_TRANSFER
   ADJUSTMENT
+  OUTBOUND_SHIPMENT
 }
 
 enum MovementStatus {
   PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum OutboundOrderStatus {
+  DRAFT
+  RELEASED
+  PARTIALLY_ALLOCATED
+  FULLY_ALLOCATED
+  PICKING
+  PARTIALLY_PICKED
+  PICKED
+  CANCELLED
+}
+
+enum PickingTaskStatus {
+  CREATED
+  ASSIGNED
+  IN_PROGRESS
   COMPLETED
   CANCELLED
 }
@@ -94,6 +114,8 @@ model Warehouse {
   movementHeaders MovementHeader[]
   cycleCountTasks CycleCountTask[]
   inventoryAdjustments InventoryAdjustment[]
+  outboundOrders OutboundOrder[]
+  pickingTasks   PickingTask[]
 }
 
 model Location {
@@ -114,6 +136,7 @@ model Location {
   movementLinesTo   MovementLine[] @relation("MovementTo")
   cycleCountLines CycleCountLine[]
   inventoryAdjustments InventoryAdjustment[]
+  pickingTaskLinesFrom PickingTaskLine[] @relation("PickingTaskFromLocation")
 
   @@unique([warehouseId, code])
   @@index([code])
@@ -138,6 +161,8 @@ model Product {
   movementLines MovementLine[]
   cycleCountLines CycleCountLine[]
   inventoryAdjustments InventoryAdjustment[]
+  outboundOrderLines OutboundOrderLine[]
+  pickingTaskLines   PickingTaskLine[] @relation("PickingTaskLineProduct")
 }
 
 model Batch {
@@ -157,6 +182,7 @@ model Batch {
   inboundReceiptLines InboundReceiptLine[]
   cycleCountLines CycleCountLine[]
   inventoryAdjustments InventoryAdjustment[]
+  pickingTaskLines PickingTaskLine[] @relation("PickingTaskLineBatch")
 
   @@index([productId, batchCode])
 }
@@ -324,4 +350,80 @@ model InventoryAdjustment {
   movementHeader MovementHeader? @relation(fields: [movementHeaderId], references: [id])
 
   @@index([warehouseId, productId, locationId, createdAt])
+}
+
+model OutboundOrder {
+  id                String              @id @default(uuid())
+  warehouseId       String
+  externalRef       String?
+  customerRef       String?
+  status            OutboundOrderStatus
+  requestedShipDate DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  createdBy         String?
+
+  warehouse    Warehouse          @relation(fields: [warehouseId], references: [id])
+  lines        OutboundOrderLine[]
+  pickingTasks PickingTask[]
+
+  @@index([warehouseId, status, requestedShipDate])
+}
+
+model OutboundOrderLine {
+  id               String   @id @default(uuid())
+  outboundOrderId  String
+  productId        String
+  requestedQty     Decimal  @db.Decimal(20, 4)
+  allocatedQty     Decimal  @db.Decimal(20, 4) @default(0)
+  pickedQty        Decimal  @db.Decimal(20, 4) @default(0)
+  uom              String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  outboundOrder OutboundOrder @relation(fields: [outboundOrderId], references: [id])
+  product       Product       @relation(fields: [productId], references: [id])
+  pickingTaskLines PickingTaskLine[] @relation("OutboundLinePicking")
+
+  @@index([outboundOrderId, productId])
+}
+
+model PickingTask {
+  id              String            @id @default(uuid())
+  warehouseId     String
+  outboundOrderId String
+  status          PickingTaskStatus
+  pickerId        String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  startedAt       DateTime?
+  completedAt     DateTime?
+
+  warehouse     Warehouse    @relation(fields: [warehouseId], references: [id])
+  outboundOrder OutboundOrder @relation(fields: [outboundOrderId], references: [id])
+  lines         PickingTaskLine[]
+
+  @@index([warehouseId, outboundOrderId, status])
+}
+
+model PickingTaskLine {
+  id                 String   @id @default(uuid())
+  pickingTaskId      String
+  outboundOrderLineId String
+  productId          String
+  batchId            String?
+  fromLocationId     String
+  quantityToPick     Decimal  @db.Decimal(20, 4)
+  quantityPicked     Decimal  @db.Decimal(20, 4) @default(0)
+  uom                String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  pickingTask       PickingTask      @relation(fields: [pickingTaskId], references: [id])
+  outboundOrderLine OutboundOrderLine @relation("OutboundLinePicking", fields: [outboundOrderLineId], references: [id])
+  product           Product          @relation("PickingTaskLineProduct", fields: [productId], references: [id])
+  batch             Batch?           @relation("PickingTaskLineBatch", fields: [batchId], references: [id])
+  fromLocation      Location         @relation("PickingTaskFromLocation", fields: [fromLocationId], references: [id])
+
+  @@index([pickingTaskId, productId, batchId, fromLocationId])
 }
