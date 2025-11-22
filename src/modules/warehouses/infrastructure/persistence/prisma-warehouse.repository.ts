@@ -51,7 +51,7 @@ export class PrismaWarehouseRepository implements WarehouseRepository {
   ): Promise<Warehouse> {
     const prisma = this.prisma as any;
     const record = await prisma.warehouse.update({
-      where: { id },
+      where: { id, tenantId: this.tenantContext.getTenantId() },
       data,
     });
 
@@ -89,7 +89,7 @@ export class PrismaWarehouseRepository implements WarehouseRepository {
   async delete(id: string): Promise<void> {
     const prisma = this.prisma as any;
     await prisma.warehouse.update({
-      where: { id },
+      where: { id, tenantId: this.tenantContext.getTenantId() },
       data: { isActive: false },
     });
   }
