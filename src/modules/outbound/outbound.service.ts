@@ -1,10 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {
+  HandlingUnitType,
   MovementStatus,
   MovementType,
   OutboundOrderStatus,
   PickingTaskStatus,
   Prisma,
+  ShipmentStatus,
   StockStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -13,6 +15,13 @@ import { CreatePickingTaskDto } from './dto/create-picking-task.dto';
 import { ConfirmPickingDto } from './dto/confirm-picking.dto';
 import { GetOutboundOrdersFilterDto } from './dto/get-outbound-orders-filter.dto';
 import { GetPickingTasksFilterDto } from './dto/get-picking-tasks-filter.dto';
+import { CreateHandlingUnitDto } from './dto/create-handling-unit.dto';
+import { AddItemsToHandlingUnitDto } from './dto/add-items-to-handling-unit.dto';
+import { GetHandlingUnitsFilterDto } from './dto/get-handling-units-filter.dto';
+import { CreateShipmentDto } from './dto/create-shipment.dto';
+import { AssignHandlingUnitsToShipmentDto } from './dto/assign-handling-units-to-shipment.dto';
+import { DispatchShipmentDto } from './dto/dispatch-shipment.dto';
+import { GetShipmentsFilterDto } from './dto/get-shipments-filter.dto';
 
 @Injectable()
 export class OutboundService {
@@ -457,5 +466,351 @@ export class OutboundService {
     }
 
     return task;
+  }
+
+  private generateHandlingUnitCode(): string {
+    const now = new Date();
+    const stamp = `${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now
+      .getDate()
+      .toString()
+      .padStart(2, '0')}`;
+    const random = Math.floor(Math.random() * 10000)
+      .toString()
+      .padStart(4, '0');
+    return `HU-${stamp}-${random}`;
+  }
+
+  async createHandlingUnit(dto: CreateHandlingUnitDto) {
+    const warehouse = await this.prisma.warehouse.findUnique({ where: { id: dto.warehouseId } });
+    if (!warehouse) {
+      throw new NotFoundException('Warehouse not found');
+    }
+
+    const code = dto.code ?? this.generateHandlingUnitCode();
+
+    return this.prisma.handlingUnit.create({
+      data: {
+        warehouseId: dto.warehouseId,
+        handlingUnitType: dto.handlingUnitType ?? HandlingUnitType.BOX,
+        code,
+        externalLabel: dto.externalLabel,
+        grossWeight: dto.grossWeight !== undefined ? new Prisma.Decimal(dto.grossWeight) : undefined,
+        volume: dto.volume !== undefined ? new Prisma.Decimal(dto.volume) : undefined,
+        length: dto.length !== undefined ? new Prisma.Decimal(dto.length) : undefined,
+        width: dto.width !== undefined ? new Prisma.Decimal(dto.width) : undefined,
+        height: dto.height !== undefined ? new Prisma.Decimal(dto.height) : undefined,
+      },
+    });
+  }
+
+  async addItemsToHandlingUnit(handlingUnitId: string, dto: AddItemsToHandlingUnitDto) {
+    const handlingUnit = await this.prisma.handlingUnit.findUnique({
+      where: { id: handlingUnitId },
+    });
+
+    if (!handlingUnit) {
+      throw new NotFoundException('Handling unit not found');
+    }
+
+    const order = await this.prisma.outboundOrder.findUnique({
+      where: { id: dto.outboundOrderId },
+      include: { lines: true },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Outbound order not found');
+    }
+
+    if (order.warehouseId !== handlingUnit.warehouseId) {
+      throw new BadRequestException('Handling unit and order must belong to the same warehouse');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      for (const item of dto.items) {
+        const orderLine = order.lines.find((line) => line.id === item.outboundOrderLineId);
+        if (!orderLine) {
+          throw new BadRequestException('Outbound order line not found in order');
+        }
+
+        if (orderLine.productId !== item.productId) {
+          throw new BadRequestException('Product mismatch for order line');
+        }
+
+        const existing = await tx.handlingUnitLine.aggregate({
+          where: { outboundOrderLineId: item.outboundOrderLineId },
+          _sum: { quantity: true },
+        });
+
+        const alreadyPacked = new Prisma.Decimal(existing._sum.quantity ?? 0);
+        const pickedQty = new Prisma.Decimal(orderLine.pickedQty ?? 0);
+        const requestedQty = new Prisma.Decimal(item.quantity);
+
+        if (requestedQty.lte(0)) {
+          throw new BadRequestException('Quantity must be greater than zero');
+        }
+
+        if (alreadyPacked.plus(requestedQty).gt(pickedQty)) {
+          throw new BadRequestException('Cannot pack more than picked quantity');
+        }
+
+        await tx.handlingUnitLine.create({
+          data: {
+            handlingUnitId: handlingUnit.id,
+            outboundOrderId: dto.outboundOrderId,
+            outboundOrderLineId: item.outboundOrderLineId,
+            productId: item.productId,
+            batchId: item.batchId,
+            quantity: requestedQty,
+            uom: item.uom,
+          },
+        });
+      }
+
+      const refreshed = await tx.handlingUnit.findUnique({
+        where: { id: handlingUnit.id },
+        include: { lines: true },
+      });
+
+      if (!refreshed) {
+        throw new NotFoundException('Handling unit not found after packing');
+      }
+
+      return refreshed;
+    });
+  }
+
+  async listHandlingUnits(filters: GetHandlingUnitsFilterDto) {
+    const where: Prisma.HandlingUnitWhereInput = {};
+
+    if (filters.warehouseId) {
+      where.warehouseId = filters.warehouseId;
+    }
+
+    if (filters.code) {
+      where.code = filters.code;
+    }
+
+    if (filters.handlingUnitType) {
+      where.handlingUnitType = filters.handlingUnitType;
+    }
+
+    if (filters.outboundOrderId) {
+      where.lines = { some: { outboundOrderId: filters.outboundOrderId } };
+    }
+
+    return this.prisma.handlingUnit.findMany({
+      where,
+      include: { lines: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getHandlingUnit(id: string) {
+    const hu = await this.prisma.handlingUnit.findUnique({
+      where: { id },
+      include: { lines: true },
+    });
+
+    if (!hu) {
+      throw new NotFoundException('Handling unit not found');
+    }
+
+    return hu;
+  }
+
+  async createShipment(dto: CreateShipmentDto) {
+    const warehouse = await this.prisma.warehouse.findUnique({ where: { id: dto.warehouseId } });
+    if (!warehouse) {
+      throw new NotFoundException('Warehouse not found');
+    }
+
+    return this.prisma.shipment.create({
+      data: {
+        warehouseId: dto.warehouseId,
+        carrierRef: dto.carrierRef,
+        vehicleRef: dto.vehicleRef,
+        routeRef: dto.routeRef,
+        status: ShipmentStatus.PLANNED,
+        scheduledDeparture: dto.scheduledDeparture ? new Date(dto.scheduledDeparture) : undefined,
+      },
+    });
+  }
+
+  async assignHandlingUnitsToShipment(shipmentId: string, dto: AssignHandlingUnitsToShipmentDto) {
+    const shipment = await this.prisma.shipment.findUnique({ where: { id: shipmentId } });
+    if (!shipment) {
+      throw new NotFoundException('Shipment not found');
+    }
+
+    if (([ShipmentStatus.CANCELLED, ShipmentStatus.DISPATCHED] as ShipmentStatus[]).includes(shipment.status)) {
+      throw new BadRequestException('Shipment cannot be modified in its current status');
+    }
+
+    const handlingUnits = await this.prisma.handlingUnit.findMany({
+      where: { id: { in: dto.handlingUnitIds } },
+      include: { lines: true },
+    });
+
+    if (handlingUnits.length !== dto.handlingUnitIds.length) {
+      throw new NotFoundException('One or more handling units not found');
+    }
+
+    if (handlingUnits.some((hu) => hu.warehouseId !== shipment.warehouseId)) {
+      throw new BadRequestException('Handling units and shipment must belong to the same warehouse');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const existingLinks = await tx.shipmentHandlingUnit.findMany({ where: { shipmentId } });
+      const existingKey = new Set(existingLinks.map((l) => `${l.handlingUnitId}-${l.outboundOrderId}`));
+
+      for (const hu of handlingUnits) {
+        const distinctOrders = Array.from(new Set(hu.lines.map((line) => line.outboundOrderId)));
+        if (!distinctOrders.length) {
+          throw new BadRequestException('Handling unit must contain lines before assignment');
+        }
+
+        for (const orderId of distinctOrders) {
+          const key = `${hu.id}-${orderId}`;
+          if (existingKey.has(key)) {
+            continue;
+          }
+
+          await tx.shipmentHandlingUnit.create({
+            data: {
+              shipmentId,
+              handlingUnitId: hu.id,
+              outboundOrderId: orderId,
+            },
+          });
+        }
+      }
+
+      const newStatus = shipment.status === ShipmentStatus.PLANNED ? ShipmentStatus.LOADING : shipment.status;
+
+      return tx.shipment.update({
+        where: { id: shipmentId },
+        data: { status: newStatus },
+        include: { shipmentHandlingUnits: true },
+      });
+    });
+  }
+
+  async dispatchShipment(shipmentId: string, dto: DispatchShipmentDto) {
+    const shipment = await this.prisma.shipment.findUnique({
+      where: { id: shipmentId },
+      include: { shipmentHandlingUnits: true },
+    });
+
+    if (!shipment) {
+      throw new NotFoundException('Shipment not found');
+    }
+
+    if (!([ShipmentStatus.PLANNED, ShipmentStatus.LOADING] as ShipmentStatus[]).includes(shipment.status)) {
+      throw new BadRequestException('Shipment cannot be dispatched from its current status');
+    }
+
+    if (!shipment.shipmentHandlingUnits.length) {
+      throw new BadRequestException('Shipment must have handling units assigned');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const handlingUnits = await tx.handlingUnit.findMany({
+        where: { shipments: { some: { shipmentId } } },
+        include: { lines: true },
+      });
+
+      // Inventory quantities were reduced during picking confirmation; dispatch logs the physical exit for traceability.
+      const movementHeader = await tx.movementHeader.create({
+        data: {
+          movementType: MovementType.OUTBOUND_SHIPMENT,
+          warehouseId: shipment.warehouseId,
+          status: MovementStatus.COMPLETED,
+          reference: shipment.id,
+        },
+      });
+
+      for (const hu of handlingUnits) {
+        for (const line of hu.lines) {
+          await tx.movementLine.create({
+            data: {
+              movementHeaderId: movementHeader.id,
+              productId: line.productId,
+              batchId: line.batchId,
+              fromLocationId: null,
+              toLocationId: null,
+              quantity: new Prisma.Decimal(line.quantity),
+              uom: line.uom,
+            },
+          });
+        }
+      }
+
+      const updatedShipment = await tx.shipment.update({
+        where: { id: shipmentId },
+        data: {
+          status: ShipmentStatus.DISPATCHED,
+          actualDeparture: dto.actualDeparture ? new Date(dto.actualDeparture) : new Date(),
+        },
+        include: { shipmentHandlingUnits: true },
+      });
+
+      return updatedShipment;
+    });
+  }
+
+  async listShipments(filters: GetShipmentsFilterDto) {
+    const where: Prisma.ShipmentWhereInput = {};
+
+    if (filters.warehouseId) {
+      where.warehouseId = filters.warehouseId;
+    }
+
+    if (filters.status) {
+      where.status = filters.status;
+    }
+
+    if (filters.carrierRef) {
+      where.carrierRef = filters.carrierRef;
+    }
+
+    if (filters.vehicleRef) {
+      where.vehicleRef = filters.vehicleRef;
+    }
+
+    if (filters.fromDate || filters.toDate) {
+      where.scheduledDeparture = {};
+      if (filters.fromDate) {
+        where.scheduledDeparture.gte = new Date(filters.fromDate);
+      }
+      if (filters.toDate) {
+        where.scheduledDeparture.lte = new Date(filters.toDate);
+      }
+    }
+
+    return this.prisma.shipment.findMany({
+      where,
+      include: { shipmentHandlingUnits: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getShipment(id: string) {
+    const shipment = await this.prisma.shipment.findUnique({
+      where: { id },
+      include: {
+        shipmentHandlingUnits: {
+          include: {
+            handlingUnit: { include: { lines: true } },
+            outboundOrder: true,
+          },
+        },
+      },
+    });
+
+    if (!shipment) {
+      throw new NotFoundException('Shipment not found');
+    }
+
+    return shipment;
   }
 }

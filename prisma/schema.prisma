@@ -59,6 +59,21 @@ enum MovementStatus {
   CANCELLED
 }
 
+enum HandlingUnitType {
+  BOX
+  PALLET
+  PARCEL
+  CONTAINER
+  OTHER
+}
+
+enum ShipmentStatus {
+  PLANNED
+  LOADING
+  DISPATCHED
+  CANCELLED
+}
+
 enum OutboundOrderStatus {
   DRAFT
   RELEASED
@@ -116,6 +131,8 @@ model Warehouse {
   inventoryAdjustments InventoryAdjustment[]
   outboundOrders OutboundOrder[]
   pickingTasks   PickingTask[]
+  handlingUnits  HandlingUnit[]
+  shipments      Shipment[]
 }
 
 model Location {
@@ -163,6 +180,7 @@ model Product {
   inventoryAdjustments InventoryAdjustment[]
   outboundOrderLines OutboundOrderLine[]
   pickingTaskLines   PickingTaskLine[] @relation("PickingTaskLineProduct")
+  handlingUnitLines HandlingUnitLine[]
 }
 
 model Batch {
@@ -183,6 +201,7 @@ model Batch {
   cycleCountLines CycleCountLine[]
   inventoryAdjustments InventoryAdjustment[]
   pickingTaskLines PickingTaskLine[] @relation("PickingTaskLineBatch")
+  handlingUnitLines HandlingUnitLine[]
 
   @@index([productId, batchCode])
 }
@@ -366,6 +385,8 @@ model OutboundOrder {
   warehouse    Warehouse          @relation(fields: [warehouseId], references: [id])
   lines        OutboundOrderLine[]
   pickingTasks PickingTask[]
+  handlingUnitLines HandlingUnitLine[]
+  shipmentHandlingUnits ShipmentHandlingUnit[]
 
   @@index([warehouseId, status, requestedShipDate])
 }
@@ -384,6 +405,7 @@ model OutboundOrderLine {
   outboundOrder OutboundOrder @relation(fields: [outboundOrderId], references: [id])
   product       Product       @relation(fields: [productId], references: [id])
   pickingTaskLines PickingTaskLine[] @relation("OutboundLinePicking")
+  handlingUnitLines HandlingUnitLine[]
 
   @@index([outboundOrderId, productId])
 }
@@ -426,4 +448,81 @@ model PickingTaskLine {
   fromLocation      Location         @relation("PickingTaskFromLocation", fields: [fromLocationId], references: [id])
 
   @@index([pickingTaskId, productId, batchId, fromLocationId])
+}
+
+model HandlingUnit {
+  id               String             @id @default(uuid())
+  warehouseId      String
+  handlingUnitType HandlingUnitType
+  code             String
+  externalLabel    String?
+  grossWeight      Decimal?           @db.Decimal(20, 4)
+  volume           Decimal?           @db.Decimal(20, 4)
+  length           Decimal?           @db.Decimal(20, 4)
+  width            Decimal?           @db.Decimal(20, 4)
+  height           Decimal?           @db.Decimal(20, 4)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  createdBy        String?
+
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+  lines      HandlingUnitLine[]
+  shipments  ShipmentHandlingUnit[]
+
+  @@index([warehouseId, code])
+}
+
+model HandlingUnitLine {
+  id                  String   @id @default(uuid())
+  handlingUnitId      String
+  outboundOrderId     String
+  outboundOrderLineId String
+  productId           String
+  batchId             String?
+  quantity            Decimal  @db.Decimal(20, 4)
+  uom                 String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  handlingUnit      HandlingUnit      @relation(fields: [handlingUnitId], references: [id])
+  outboundOrder     OutboundOrder     @relation(fields: [outboundOrderId], references: [id])
+  outboundOrderLine OutboundOrderLine @relation(fields: [outboundOrderLineId], references: [id])
+  product           Product           @relation(fields: [productId], references: [id])
+  batch             Batch?            @relation(fields: [batchId], references: [id])
+
+  @@index([handlingUnitId, outboundOrderId, productId, batchId])
+}
+
+model Shipment {
+  id                  String          @id @default(uuid())
+  warehouseId         String
+  carrierRef          String?
+  vehicleRef          String?
+  routeRef            String?
+  status              ShipmentStatus
+  scheduledDeparture  DateTime?
+  actualDeparture     DateTime?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  createdBy           String?
+
+  warehouse            Warehouse              @relation(fields: [warehouseId], references: [id])
+  shipmentHandlingUnits ShipmentHandlingUnit[]
+
+  @@index([warehouseId, status, scheduledDeparture])
+}
+
+model ShipmentHandlingUnit {
+  id              String   @id @default(uuid())
+  shipmentId      String
+  handlingUnitId  String
+  outboundOrderId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  shipment      Shipment      @relation(fields: [shipmentId], references: [id])
+  handlingUnit  HandlingUnit  @relation(fields: [handlingUnitId], references: [id])
+  outboundOrder OutboundOrder @relation(fields: [outboundOrderId], references: [id])
+
+  @@index([shipmentId, handlingUnitId, outboundOrderId])
 }
