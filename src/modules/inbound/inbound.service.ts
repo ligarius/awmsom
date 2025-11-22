@@ -140,6 +140,16 @@ export class InboundService {
         throw new BadRequestException('Destination location must be in the same warehouse');
       }
 
+      if (dto.lines) {
+        const lineIds = new Set<string>();
+        for (const line of dto.lines) {
+          if (lineIds.has(line.lineId)) {
+            throw new BadRequestException('Duplicate line IDs are not allowed');
+          }
+          lineIds.add(line.lineId);
+        }
+      }
+
       const linePayloads: {
         lineId: string;
         receivedQty?: number;
