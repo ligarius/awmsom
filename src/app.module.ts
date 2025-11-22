@@ -8,6 +8,7 @@ import { LocationsModule } from './modules/locations/locations.module';
 import { ProductsModule } from './modules/products/products.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { InboundModule } from './modules/inbound/inbound.module';
+import { OutboundModule } from './modules/outbound/outbound.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { InboundModule } from './modules/inbound/inbound.module';
     ProductsModule,
     InventoryModule,
     InboundModule,
+    OutboundModule,
   ],
 })
 export class AppModule {}
