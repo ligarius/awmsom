@@ -10,3 +10,5 @@ This repository contains the baseline architecture and documentation for a modul
 
 ## Documentation
 See [docs/architecture.md](docs/architecture.md) for the architectural blueprint and next steps.
+
+- Sprint planning and traceability: [docs/sprint4.md](docs/sprint4.md)
