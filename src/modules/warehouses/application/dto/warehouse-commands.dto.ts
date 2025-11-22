@@ -4,6 +4,7 @@ export interface CreateWarehouseCommand {
   isActive?: boolean;
   createdBy?: string;
   updatedBy?: string;
+  tenantId: string;
 }
 
 export interface UpdateWarehouseCommand {
