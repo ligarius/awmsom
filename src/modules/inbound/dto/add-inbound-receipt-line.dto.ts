@@ -1,16 +1,17 @@
-import { IsDateString, IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsDateString, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class AddInboundReceiptLineDto {
   @IsUUID()
-  productId: string;
+  productId!: string;
 
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 4 })
-  expectedQty: number;
+  @Min(0.0001)
+  expectedQty!: number;
 
   @IsString()
-  uom: string;
+  uom!: string;
 
   @IsOptional()
   @IsString()
