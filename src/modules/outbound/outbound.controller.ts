@@ -14,6 +14,13 @@ import { CreatePickingTaskDto } from './dto/create-picking-task.dto';
 import { ConfirmPickingDto } from './dto/confirm-picking.dto';
 import { GetOutboundOrdersFilterDto } from './dto/get-outbound-orders-filter.dto';
 import { GetPickingTasksFilterDto } from './dto/get-picking-tasks-filter.dto';
+import { CreateHandlingUnitDto } from './dto/create-handling-unit.dto';
+import { AddItemsToHandlingUnitDto } from './dto/add-items-to-handling-unit.dto';
+import { GetHandlingUnitsFilterDto } from './dto/get-handling-units-filter.dto';
+import { CreateShipmentDto } from './dto/create-shipment.dto';
+import { AssignHandlingUnitsToShipmentDto } from './dto/assign-handling-units-to-shipment.dto';
+import { DispatchShipmentDto } from './dto/dispatch-shipment.dto';
+import { GetShipmentsFilterDto } from './dto/get-shipments-filter.dto';
 
 @Controller('outbound')
 export class OutboundController {
@@ -71,5 +78,59 @@ export class OutboundController {
   @Get('picking-tasks/:id')
   getPickingTask(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.outboundService.getPickingTask(id);
+  }
+
+  @Post('handling-units')
+  createHandlingUnit(@Body() dto: CreateHandlingUnitDto) {
+    return this.outboundService.createHandlingUnit(dto);
+  }
+
+  @Post('handling-units/:id/items')
+  addItemsToHandlingUnit(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: AddItemsToHandlingUnitDto,
+  ) {
+    return this.outboundService.addItemsToHandlingUnit(id, dto);
+  }
+
+  @Get('handling-units')
+  listHandlingUnits(@Query() filters: GetHandlingUnitsFilterDto) {
+    return this.outboundService.listHandlingUnits(filters);
+  }
+
+  @Get('handling-units/:id')
+  getHandlingUnit(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.outboundService.getHandlingUnit(id);
+  }
+
+  @Post('shipments')
+  createShipment(@Body() dto: CreateShipmentDto) {
+    return this.outboundService.createShipment(dto);
+  }
+
+  @Post('shipments/:id/handling-units')
+  assignHandlingUnits(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: AssignHandlingUnitsToShipmentDto,
+  ) {
+    return this.outboundService.assignHandlingUnitsToShipment(id, dto);
+  }
+
+  @Post('shipments/:id/dispatch')
+  dispatchShipment(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: DispatchShipmentDto,
+  ) {
+    return this.outboundService.dispatchShipment(id, dto);
+  }
+
+  @Get('shipments')
+  listShipments(@Query() filters: GetShipmentsFilterDto) {
+    return this.outboundService.listShipments(filters);
+  }
+
+  @Get('shipments/:id')
+  getShipment(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.outboundService.getShipment(id);
   }
 }
