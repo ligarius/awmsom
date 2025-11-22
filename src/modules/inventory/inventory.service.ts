@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { AdjustmentType, CycleCountStatus, MovementStatus, MovementType, Prisma, StockStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { TenantContextService } from '../../common/tenant-context.service';
 import {
   AddCycleCountLinesDto,
   CreateCycleCountTaskDto,
@@ -10,14 +11,21 @@ import { CreateInventoryAdjustmentDto } from './dto/inventory-adjustment.dto';
 
 @Injectable()
 export class InventoryService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly tenantContext: TenantContextService,
+  ) {}
 
   health() {
+    this.tenantContext.getTenantId();
     return { status: 'ok' };
   }
 
   async createCycleCountTask(dto: CreateCycleCountTaskDto) {
-    const warehouse = await this.prisma.warehouse.findUnique({ where: { id: dto.warehouseId } });
+    const tenantId = this.tenantContext.getTenantId();
+    const warehouse = await this.prisma.warehouse.findFirst({
+      where: { id: dto.warehouseId, tenantId } as any,
+    });
     if (!warehouse) {
       throw new NotFoundException('Warehouse not found');
     }
@@ -25,14 +33,15 @@ export class InventoryService {
     return this.prisma.$transaction(async (tx) => {
       const task = await tx.cycleCountTask.create({
         data: {
+          tenantId,
           warehouseId: dto.warehouseId,
           description: dto.description,
           status: CycleCountStatus.PENDING,
-        },
+        } as any,
       });
 
       if (dto.lines?.length) {
-        await this.addCycleCountLines(task.id, { lines: dto.lines }, tx);
+        await this.addCycleCountLines(task.id, { lines: dto.lines }, tx, tenantId);
       }
 
       return task;
@@ -43,8 +52,13 @@ export class InventoryService {
     taskId: string,
     dto: AddCycleCountLinesDto,
     prismaClient: PrismaService | Prisma.TransactionClient = this.prisma,
+    tenantId?: string,
   ) {
-    const task = await prismaClient.cycleCountTask.findUnique({ where: { id: taskId } });
+    const currentTenantId = tenantId ?? this.tenantContext.getTenantId();
+
+    const task = await prismaClient.cycleCountTask.findFirst({
+      where: { id: taskId, tenantId: currentTenantId } as any,
+    });
     if (!task) {
       throw new NotFoundException('Cycle count task not found');
     }
@@ -79,6 +93,7 @@ export class InventoryService {
     if (combinations.length) {
       const existingLines = await prismaClient.cycleCountLine.count({
         where: {
+          tenantId: currentTenantId,
           cycleCountTaskId: taskId,
           OR: combinations.map((combination) => ({
             productId: combination.productId,
@@ -86,7 +101,7 @@ export class InventoryService {
             locationId: combination.locationId,
             uom: combination.uom,
           })),
-        },
+        } as any,
       });
 
       if (existingLines > 0) {
@@ -97,13 +112,17 @@ export class InventoryService {
     const linesToCreate = [] as Prisma.CycleCountLineCreateManyInput[];
 
     for (const line of dto.lines) {
-      const product = await prismaClient.product.findUnique({ where: { id: line.productId } });
+      const product = await prismaClient.product.findFirst({
+        where: { id: line.productId, tenantId: currentTenantId } as any,
+      });
       if (!product) {
         throw new BadRequestException('Product not found');
       }
 
       if (line.batchId) {
-        const batch = await prismaClient.batch.findUnique({ where: { id: line.batchId } });
+        const batch = await prismaClient.batch.findFirst({
+          where: { id: line.batchId, tenantId: currentTenantId } as any,
+        });
         if (!batch) {
           throw new BadRequestException('Batch not found');
         }
@@ -113,7 +132,9 @@ export class InventoryService {
         }
       }
 
-      const location = await prismaClient.location.findUnique({ where: { id: line.locationId } });
+      const location = await prismaClient.location.findFirst({
+        where: { id: line.locationId, tenantId: currentTenantId } as any,
+      });
       if (!location) {
         throw new BadRequestException('Location not found');
       }
@@ -130,28 +151,33 @@ export class InventoryService {
               line.locationId,
               line.uom,
               prismaClient,
+              currentTenantId,
             )
           : new Prisma.Decimal(line.expectedQty);
 
       linesToCreate.push({
+        tenantId: currentTenantId,
         cycleCountTaskId: taskId,
         productId: line.productId,
         batchId: line.batchId,
         locationId: line.locationId,
         uom: line.uom,
         expectedQty,
-      });
+      } as any);
     }
 
     if (linesToCreate.length) {
       await prismaClient.cycleCountLine.createMany({ data: linesToCreate });
     }
 
-    return prismaClient.cycleCountLine.findMany({ where: { cycleCountTaskId: taskId } });
+    return prismaClient.cycleCountLine.findMany({
+      where: { cycleCountTaskId: taskId, tenantId: currentTenantId } as any,
+    });
   }
 
   async startCycleCount(taskId: string) {
-    const task = await this.prisma.cycleCountTask.findUnique({ where: { id: taskId } });
+    const tenantId = this.tenantContext.getTenantId();
+    const task = await this.prisma.cycleCountTask.findFirst({ where: { id: taskId, tenantId } as any });
     if (!task) {
       throw new NotFoundException('Cycle count task not found');
     }
@@ -161,13 +187,14 @@ export class InventoryService {
     }
 
     return this.prisma.cycleCountTask.update({
-      where: { id: taskId },
+      where: { id: taskId } as any,
       data: { status: CycleCountStatus.IN_PROGRESS, startedAt: new Date() },
     });
   }
 
   async submitCycleCount(taskId: string, dto: SubmitCycleCountResultDto) {
-    const task = await this.prisma.cycleCountTask.findUnique({ where: { id: taskId } });
+    const tenantId = this.tenantContext.getTenantId();
+    const task = await this.prisma.cycleCountTask.findFirst({ where: { id: taskId, tenantId } as any });
     if (!task) {
       throw new NotFoundException('Cycle count task not found');
     }
@@ -181,7 +208,7 @@ export class InventoryService {
 
     await this.prisma.$transaction(async (tx) => {
       const pendingLines = await tx.cycleCountLine.findMany({
-        where: { cycleCountTaskId: taskId, countedAt: null },
+        where: { cycleCountTaskId: taskId, countedAt: null, tenantId } as any,
         select: { id: true },
       });
 
@@ -200,7 +227,7 @@ export class InventoryService {
         }
 
         seenLineIds.add(line.lineId);
-        const existingLine = await tx.cycleCountLine.findUnique({ where: { id: line.lineId } });
+        const existingLine = await tx.cycleCountLine.findFirst({ where: { id: line.lineId, tenantId } as any });
         if (!existingLine || existingLine.cycleCountTaskId !== taskId) {
           throw new NotFoundException(`Cycle count line ${line.lineId} not found for task`);
         }
@@ -213,7 +240,7 @@ export class InventoryService {
         const differenceQty = countedQty.minus(existingLine.expectedQty);
 
         await tx.cycleCountLine.update({
-          where: { id: line.lineId },
+          where: { id: line.lineId, tenantId } as any,
           data: {
             countedQty,
             differenceQty,
@@ -227,7 +254,7 @@ export class InventoryService {
 
       for (const line of submittedLines) {
         if (!line.differenceQty.isZero()) {
-          const lineData = await tx.cycleCountLine.findUnique({ where: { id: line.id } });
+          const lineData = await tx.cycleCountLine.findFirst({ where: { id: line.id, tenantId } as any });
           if (!lineData) {
             continue;
           }
@@ -238,6 +265,7 @@ export class InventoryService {
             lineData.locationId,
             lineData.uom,
             tx,
+            tenantId,
           );
 
           await this.applyInventoryAdjustment(
@@ -254,30 +282,32 @@ export class InventoryService {
               createdBy: 'system',
             },
             tx,
+            tenantId,
           );
         }
       }
 
       const remainingPendingLines = await tx.cycleCountLine.count({
-        where: { cycleCountTaskId: taskId, countedAt: null },
+        where: { cycleCountTaskId: taskId, countedAt: null, tenantId } as any,
       });
 
       if (remainingPendingLines === 0) {
         await tx.cycleCountTask.update({
-          where: { id: taskId },
+          where: { id: taskId } as any,
           data: { status: CycleCountStatus.COMPLETED, completedAt: now },
         });
       }
     });
 
     return this.prisma.cycleCountTask.findUnique({
-      where: { id: taskId },
+      where: { id: taskId, tenantId } as any,
       include: { lines: true },
     });
   }
 
   async listCycleCounts(params: { warehouseId?: string; status?: CycleCountStatus; from?: string; to?: string }) {
-    const where: Prisma.CycleCountTaskWhereInput = {};
+    const tenantId = this.tenantContext.getTenantId();
+    const where: Prisma.CycleCountTaskWhereInput = { tenantId } as any;
     if (params.warehouseId) where.warehouseId = params.warehouseId;
     if (params.status) where.status = params.status;
     if (params.from || params.to) {
@@ -290,7 +320,11 @@ export class InventoryService {
   }
 
   async getCycleCountById(id: string) {
-    const task = await this.prisma.cycleCountTask.findUnique({ where: { id }, include: { lines: true } });
+    const tenantId = this.tenantContext.getTenantId();
+    const task = await this.prisma.cycleCountTask.findFirst({
+      where: { id, tenantId } as any,
+      include: { lines: true },
+    });
     if (!task) {
       throw new NotFoundException('Cycle count task not found');
     }
@@ -298,7 +332,8 @@ export class InventoryService {
   }
 
   async createInventoryAdjustment(dto: CreateInventoryAdjustmentDto) {
-    return this.applyInventoryAdjustment({ ...dto, createdBy: 'system' });
+    const tenantId = this.tenantContext.getTenantId();
+    return this.applyInventoryAdjustment({ ...dto, createdBy: 'system' }, this.prisma, tenantId);
   }
 
   async increaseStock(
@@ -312,20 +347,28 @@ export class InventoryService {
       stockStatus: StockStatus;
     },
     prismaClient: PrismaService | Prisma.TransactionClient = this.prisma,
+    tenantId?: string,
   ) {
-    const product = await prismaClient.product.findUnique({ where: { id: params.productId } });
+    const currentTenantId = tenantId ?? this.tenantContext.getTenantId();
+    const product = await prismaClient.product.findFirst({
+      where: { id: params.productId, tenantId: currentTenantId } as any,
+    });
     if (!product) {
       throw new NotFoundException('Product not found');
     }
 
     if (params.batchId) {
-      const batch = await prismaClient.batch.findUnique({ where: { id: params.batchId } });
+      const batch = await prismaClient.batch.findFirst({
+        where: { id: params.batchId, tenantId: currentTenantId } as any,
+      });
       if (!batch) {
         throw new NotFoundException('Batch not found');
       }
     }
 
-    const location = await prismaClient.location.findUnique({ where: { id: params.locationId } });
+    const location = await prismaClient.location.findFirst({
+      where: { id: params.locationId, tenantId: currentTenantId } as any,
+    });
     if (!location) {
       throw new NotFoundException('Location not found');
     }
@@ -341,30 +384,32 @@ export class InventoryService {
 
     const existingInventory = await prismaClient.inventory.findFirst({
       where: {
+        tenantId: currentTenantId,
         productId: params.productId,
         batchId: params.batchId ?? null,
         locationId: params.locationId,
         uom: params.uom,
         stockStatus: params.stockStatus,
-      },
+      } as any,
     });
 
     if (existingInventory) {
       return prismaClient.inventory.update({
-        where: { id: existingInventory.id },
+        where: { id: existingInventory.id, tenantId: currentTenantId } as any,
         data: { quantity: new Prisma.Decimal(existingInventory.quantity).plus(incrementQty) },
       });
     }
 
     return prismaClient.inventory.create({
       data: {
+        tenantId: currentTenantId,
         productId: params.productId,
         batchId: params.batchId,
         locationId: params.locationId,
         quantity: incrementQty,
         uom: params.uom,
         stockStatus: params.stockStatus,
-      },
+      } as any,
     });
   }
 
@@ -375,7 +420,8 @@ export class InventoryService {
     from?: string;
     to?: string;
   }) {
-    const where: Prisma.InventoryAdjustmentWhereInput = {};
+    const tenantId = this.tenantContext.getTenantId();
+    const where: Prisma.InventoryAdjustmentWhereInput = { tenantId } as any;
     if (params.warehouseId) where.warehouseId = params.warehouseId;
     if (params.productId) where.productId = params.productId;
     if (params.locationId) where.locationId = params.locationId;
@@ -389,7 +435,8 @@ export class InventoryService {
   }
 
   async getInventoryAdjustmentById(id: string) {
-    const adjustment = await this.prisma.inventoryAdjustment.findUnique({ where: { id } });
+    const tenantId = this.tenantContext.getTenantId();
+    const adjustment = await this.prisma.inventoryAdjustment.findFirst({ where: { id, tenantId } as any });
     if (!adjustment) {
       throw new NotFoundException('Inventory adjustment not found');
     }
@@ -410,8 +457,13 @@ export class InventoryService {
       createdBy?: string;
     },
     prismaClient: PrismaService | Prisma.TransactionClient = this.prisma,
+    tenantId?: string,
   ) {
-    const product = await prismaClient.product.findUnique({ where: { id: params.productId } });
+    const currentTenantId = tenantId ?? this.tenantContext.getTenantId();
+
+    const product = await prismaClient.product.findFirst({
+      where: { id: params.productId, tenantId: currentTenantId } as any,
+    });
     if (!product) {
       throw new NotFoundException('Product not found');
     }
@@ -419,14 +471,18 @@ export class InventoryService {
     const uom = params.uom ?? product.defaultUom;
 
     if (params.batchId) {
-      const batch = await prismaClient.batch.findUnique({ where: { id: params.batchId } });
+      const batch = await prismaClient.batch.findFirst({
+        where: { id: params.batchId, tenantId: currentTenantId } as any,
+      });
       if (!batch) {
         throw new NotFoundException('Batch not found');
       }
       // Blocked or recall batches are allowed for counting/adjustment but should be handled by downstream picking rules.
     }
 
-    const location = await prismaClient.location.findUnique({ where: { id: params.locationId } });
+    const location = await prismaClient.location.findFirst({
+      where: { id: params.locationId, tenantId: currentTenantId } as any,
+    });
     if (!location) {
       throw new NotFoundException('Location not found');
     }
@@ -447,16 +503,18 @@ export class InventoryService {
         params.locationId,
         uom,
         prismaClient,
+        currentTenantId,
       ));
 
     const existingInventory = await prismaClient.inventory.findFirst({
       where: {
+        tenantId: currentTenantId,
         productId: params.productId,
         batchId: params.batchId ?? null,
         locationId: params.locationId,
         stockStatus,
         uom,
-      },
+      } as any,
     });
 
     const previousQty = existingInventory ? new Prisma.Decimal(existingInventory.quantity) : new Prisma.Decimal(0);
@@ -469,19 +527,20 @@ export class InventoryService {
     let inventoryRecord = existingInventory;
     if (existingInventory) {
       inventoryRecord = await prismaClient.inventory.update({
-        where: { id: existingInventory.id },
+        where: { id: existingInventory.id, tenantId: currentTenantId } as any,
         data: { quantity: newQtyDecimal },
       });
     } else {
       inventoryRecord = await prismaClient.inventory.create({
         data: {
+          tenantId: currentTenantId,
           productId: params.productId,
           batchId: params.batchId,
           locationId: params.locationId,
           quantity: newQtyDecimal,
           uom,
           stockStatus,
-        },
+        } as any,
       });
     }
 
@@ -493,16 +552,18 @@ export class InventoryService {
 
     const movementHeader = await prismaClient.movementHeader.create({
       data: {
+        tenantId: currentTenantId,
         movementType: MovementType.ADJUSTMENT,
         warehouseId: params.warehouseId,
         status: MovementStatus.COMPLETED,
         reference: params.reference,
         createdBy: params.createdBy,
-      },
+      } as any,
     });
 
     await prismaClient.movementLine.create({
       data: {
+        tenantId: currentTenantId,
         movementHeaderId: movementHeader.id,
         productId: params.productId,
         batchId: params.batchId,
@@ -510,11 +571,12 @@ export class InventoryService {
         toLocationId: differenceQty.gt(0) ? params.locationId : null,
         quantity: differenceQty.abs(),
         uom,
-      },
+      } as any,
     });
 
     await prismaClient.inventoryAdjustment.create({
       data: {
+        tenantId: currentTenantId,
         warehouseId: params.warehouseId,
         productId: params.productId,
         batchId: params.batchId,
@@ -528,7 +590,7 @@ export class InventoryService {
         reason: params.reason,
         reference: params.reference,
         createdBy: params.createdBy,
-      },
+      } as any,
     });
 
     return inventoryRecord;
@@ -540,6 +602,7 @@ export class InventoryService {
     locationId: string,
     uom: string,
     prismaClient: PrismaService | Prisma.TransactionClient = this.prisma,
+    tenantId = this.tenantContext.getTenantId(),
   ): Promise<Prisma.Decimal> {
     const relevantStatuses = [
       StockStatus.AVAILABLE,
@@ -552,17 +615,19 @@ export class InventoryService {
 
     const inventory = await prismaClient.inventory.groupBy({
       where: {
+        tenantId,
         productId,
         batchId: batchId ?? null,
         locationId,
         uom,
         stockStatus: { in: relevantStatuses },
-      },
+      } as any,
       by: ['productId', 'batchId', 'locationId', 'uom'],
       _sum: { quantity: true },
     });
 
-    const sumQty = inventory[0]?._sum.quantity ?? new Prisma.Decimal(0);
+    const [firstRecord] = inventory ?? [];
+    const sumQty = firstRecord?._sum?.quantity ?? new Prisma.Decimal(0);
 
     return new Prisma.Decimal(sumQty);
   }
@@ -573,21 +638,23 @@ export class InventoryService {
     locationId: string,
     uom: string,
     prismaClient: PrismaService | Prisma.TransactionClient = this.prisma,
+    tenantId = this.tenantContext.getTenantId(),
   ): Promise<StockStatus> {
     const inventoryByStatus =
       (await prismaClient.inventory.groupBy({
         where: {
+          tenantId,
           productId,
           batchId: batchId ?? null,
           locationId,
           uom,
-        },
+        } as any,
         by: ['stockStatus'],
         _sum: { quantity: true },
       })) ?? [];
 
     const availableEntry = inventoryByStatus.find((record) => {
-      const qty = new Prisma.Decimal(record._sum.quantity ?? 0);
+      const qty = new Prisma.Decimal(record._sum?.quantity ?? 0);
       return record.stockStatus === StockStatus.AVAILABLE && qty.gt(0);
     });
 
@@ -598,7 +665,7 @@ export class InventoryService {
     if (inventoryByStatus.length) {
       const predominant = inventoryByStatus.reduce(
         (current, record) => {
-          const qty = new Prisma.Decimal(record._sum.quantity ?? 0);
+          const qty = new Prisma.Decimal(record._sum?.quantity ?? 0);
           if (!current || qty.gt(current.qty)) {
             return { status: record.stockStatus, qty };
           }
