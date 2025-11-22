@@ -146,6 +146,25 @@ describe('InboundService', () => {
     expect(result.status).toBe(InboundReceiptStatus.RECEIVED);
   });
 
+  it('rejects confirmation when receipt has no lines', async () => {
+    (tx.inboundReceipt.findUnique as jest.Mock).mockResolvedValue({
+      id: 'rec-empty',
+      warehouseId: 'wh-1',
+      status: InboundReceiptStatus.DRAFT,
+      receivedAt: null,
+      lines: [],
+      warehouse: {},
+    });
+
+    await expect(
+      service.confirmReceipt('rec-empty', {
+        toLocationId: 'loc-1',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(tx.location.findUnique).not.toHaveBeenCalled();
+  });
+
   it('throws when received quantity exceeds pending amount', async () => {
     (tx.inboundReceipt.findUnique as jest.Mock).mockResolvedValue({
       id: 'rec-1',
@@ -174,6 +193,37 @@ describe('InboundService', () => {
       service.confirmReceipt('rec-1', {
         toLocationId: 'loc-1',
         lines: [{ lineId: 'line-1', receivedQty: 3 }],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects confirmation when provided lines array is empty', async () => {
+    (tx.inboundReceipt.findUnique as jest.Mock).mockResolvedValue({
+      id: 'rec-1',
+      warehouseId: 'wh-1',
+      status: InboundReceiptStatus.DRAFT,
+      receivedAt: null,
+      lines: [
+        {
+          id: 'line-1',
+          inboundReceiptId: 'rec-1',
+          productId: 'prod-1',
+          expectedQty: decimal(5),
+          receivedQty: decimal(0),
+          uom: 'EA',
+          batchCode: null,
+          expiryDate: null,
+          product: { id: 'prod-1', requiresBatch: false, requiresExpiryDate: false },
+        },
+      ],
+      warehouse: {},
+    });
+    (tx.location.findUnique as jest.Mock).mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
+
+    await expect(
+      service.confirmReceipt('rec-1', {
+        toLocationId: 'loc-1',
+        lines: [],
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
