@@ -12,17 +12,21 @@ import { CreateInboundReceiptDto } from './dto/create-inbound-receipt.dto';
 import { AddInboundReceiptLineDto } from './dto/add-inbound-receipt-line.dto';
 import { ConfirmInboundReceiptDto } from './dto/confirm-inbound-receipt.dto';
 import { GetInboundReceiptsFilterDto } from './dto/get-inbound-receipts-filter.dto';
+import { TenantContextService } from '../../common/tenant-context.service';
 
 @Injectable()
 export class InboundService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly inventoryService: InventoryService,
+    private readonly tenantContext: TenantContextService,
   ) {}
 
   async createReceipt(dto: CreateInboundReceiptDto) {
-    const warehouse = await this.prisma.warehouse.findUnique({
-      where: { id: dto.warehouseId },
+    const tenantId = this.tenantContext.getTenantId();
+
+    const warehouse = await this.prisma.warehouse.findFirst({
+      where: { id: dto.warehouseId, tenantId } as any,
     });
 
     if (!warehouse) {
@@ -31,18 +35,21 @@ export class InboundService {
 
     return this.prisma.inboundReceipt.create({
       data: {
+        tenantId,
         warehouseId: dto.warehouseId,
         externalRef: dto.externalRef,
         status: InboundReceiptStatus.DRAFT,
-      },
+      } as any,
     });
   }
 
   async addLine(receiptId: string, dto: AddInboundReceiptLineDto) {
-    const receipt = await this.prisma.inboundReceipt.findUnique({
-      where: { id: receiptId },
-      include: { lines: true },
-    });
+    const tenantId = this.tenantContext.getTenantId();
+
+    const receipt = (await this.prisma.inboundReceipt.findFirst({
+      where: { id: receiptId, tenantId } as any,
+      include: { lines: { where: { tenantId } as any } } as any,
+    })) as any;
 
     if (!receipt) {
       throw new NotFoundException('Inbound receipt not found');
@@ -52,7 +59,7 @@ export class InboundService {
       throw new BadRequestException('Cannot add lines to a confirmed receipt');
     }
 
-    const product = await this.prisma.product.findUnique({ where: { id: dto.productId } });
+    const product = await this.prisma.product.findFirst({ where: { id: dto.productId, tenantId } as any });
     if (!product) {
       throw new NotFoundException('Product not found');
     }
@@ -69,6 +76,7 @@ export class InboundService {
 
     return this.prisma.inboundReceiptLine.create({
       data: {
+        tenantId,
         inboundReceiptId: receipt.id,
         productId: dto.productId,
         expectedQty,
@@ -76,29 +84,34 @@ export class InboundService {
         batchCode: dto.batchCode,
         expiryDate: dto.expiryDate ? new Date(dto.expiryDate) : undefined,
         sourceDocumentLineRef: dto.sourceDocumentLineRef,
-      },
+      } as any,
     });
   }
 
   async listReceipts(filters: GetInboundReceiptsFilterDto) {
+    const tenantId = this.tenantContext.getTenantId();
+
     return this.prisma.inboundReceipt.findMany({
       where: {
+        tenantId,
         warehouseId: filters.warehouseId,
         status: filters.status,
         createdAt: {
           gte: filters.fromDate ? new Date(filters.fromDate) : undefined,
           lte: filters.toDate ? new Date(filters.toDate) : undefined,
         },
-      },
-      include: { lines: true },
+      } as any,
+      include: { lines: { where: { tenantId } as any } } as any,
     });
   }
 
   async getReceipt(id: string) {
-    const receipt = await this.prisma.inboundReceipt.findUnique({
-      where: { id },
-      include: { lines: true },
-    });
+    const tenantId = this.tenantContext.getTenantId();
+
+    const receipt = (await this.prisma.inboundReceipt.findFirst({
+      where: { id, tenantId } as any,
+      include: { lines: { where: { tenantId } as any } } as any,
+    })) as any;
 
     if (!receipt) {
       throw new NotFoundException('Inbound receipt not found');
@@ -108,14 +121,16 @@ export class InboundService {
   }
 
   async confirmReceipt(id: string, dto: ConfirmInboundReceiptDto) {
+    const tenantId = this.tenantContext.getTenantId();
+
     return this.prisma.$transaction(async (tx) => {
-      const receipt = await tx.inboundReceipt.findUnique({
-        where: { id },
+      const receipt = (await tx.inboundReceipt.findFirst({
+        where: { id, tenantId } as any,
         include: {
-          lines: { include: { product: true } },
+          lines: { where: { tenantId } as any, include: { product: true } } as any,
           warehouse: true,
         },
-      });
+      })) as any;
 
       if (!receipt) {
         throw new NotFoundException('Inbound receipt not found');
@@ -132,8 +147,8 @@ export class InboundService {
         throw new BadRequestException('Receipt has no lines to confirm');
       }
 
-      const destinationLocation = await tx.location.findUnique({
-        where: { id: dto.toLocationId },
+      const destinationLocation = await tx.location.findFirst({
+        where: { id: dto.toLocationId, tenantId } as any,
       });
 
       if (!destinationLocation) {
@@ -162,7 +177,7 @@ export class InboundService {
         receivedQty?: number;
         batchCode?: string;
         expiryDate?: string;
-      }[] = dto.lines ?? receipt.lines.map((line) => ({ lineId: line.id }));
+      }[] = dto.lines ?? receipt.lines.map((line: any) => ({ lineId: line.id }));
 
       if (!linePayloads.length) {
         throw new BadRequestException('No lines to process');
@@ -171,7 +186,7 @@ export class InboundService {
       const movementLines: Prisma.MovementLineCreateWithoutMovementHeaderInput[] = [];
 
       for (const payload of linePayloads) {
-        const receiptLine = receipt.lines.find((line) => line.id === payload.lineId);
+        const receiptLine = receipt.lines.find((line: any) => line.id === payload.lineId);
         if (!receiptLine) {
           throw new NotFoundException(`Line ${payload.lineId} not found in receipt`);
         }
@@ -206,7 +221,7 @@ export class InboundService {
         let batchId: string | null = null;
         if (receiptLine.product.requiresBatch) {
           const existingBatch = await tx.batch.findFirst({
-            where: { productId: receiptLine.productId, batchCode: batchCode as string },
+            where: { productId: receiptLine.productId, batchCode: batchCode as string, tenantId } as any,
           });
 
           if (existingBatch) {
@@ -214,10 +229,11 @@ export class InboundService {
           } else {
             const createdBatch = await tx.batch.create({
               data: {
+                tenantId,
                 productId: receiptLine.productId,
                 batchCode: batchCode as string,
                 expiryDate,
-              },
+              } as any,
             });
             batchId = createdBatch.id;
           }
@@ -261,7 +277,7 @@ export class InboundService {
       }
 
       const updatedLines = await tx.inboundReceiptLine.findMany({
-        where: { inboundReceiptId: receipt.id },
+        where: { inboundReceiptId: receipt.id, tenantId } as any,
       });
 
       const allReceived = updatedLines.every((line) =>
@@ -274,14 +290,15 @@ export class InboundService {
 
       const movementHeader = await tx.movementHeader.create({
         data: {
+          tenantId,
           movementType: MovementType.INBOUND_RECEIPT,
           warehouseId: receipt.warehouseId,
           reference: receipt.id,
           status: MovementStatus.COMPLETED,
           lines: {
-            create: movementLines,
+            create: movementLines.map((line) => ({ ...line, tenantId })),
           },
-        },
+        } as any,
         include: { lines: true },
       });
 
