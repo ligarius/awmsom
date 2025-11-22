@@ -53,6 +53,47 @@ export class InventoryService {
       throw new BadRequestException('Cannot add lines to a completed or cancelled task');
     }
 
+    const seenCombinations = new Set<string>();
+    const combinations = [] as {
+      productId: string;
+      batchId: string | null;
+      locationId: string;
+      uom: string;
+    }[];
+
+    for (const line of dto.lines) {
+      const key = `${line.productId}|${line.batchId ?? null}|${line.locationId}|${line.uom}`;
+      if (seenCombinations.has(key)) {
+        throw new BadRequestException('Duplicate cycle count lines in request');
+      }
+
+      seenCombinations.add(key);
+      combinations.push({
+        productId: line.productId,
+        batchId: line.batchId ?? null,
+        locationId: line.locationId,
+        uom: line.uom,
+      });
+    }
+
+    if (combinations.length) {
+      const existingLines = await prismaClient.cycleCountLine.count({
+        where: {
+          cycleCountTaskId: taskId,
+          OR: combinations.map((combination) => ({
+            productId: combination.productId,
+            batchId: combination.batchId,
+            locationId: combination.locationId,
+            uom: combination.uom,
+          })),
+        },
+      });
+
+      if (existingLines > 0) {
+        throw new BadRequestException('Duplicate cycle count lines for task');
+      }
+    }
+
     const linesToCreate = [] as Prisma.CycleCountLineCreateManyInput[];
 
     for (const line of dto.lines) {
