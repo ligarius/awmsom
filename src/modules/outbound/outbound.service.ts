@@ -24,6 +24,7 @@ import { CreateShipmentDto } from './dto/create-shipment.dto';
 import { AssignHandlingUnitsToShipmentDto } from './dto/assign-handling-units-to-shipment.dto';
 import { DispatchShipmentDto } from './dto/dispatch-shipment.dto';
 import { GetShipmentsFilterDto } from './dto/get-shipments-filter.dto';
+import { InventoryOptimizationService } from '../inventory/inventory-optimization.service';
 
 @Injectable()
 export class OutboundService {
@@ -31,6 +32,7 @@ export class OutboundService {
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
     private readonly configService: ConfigService,
+    private readonly inventoryOptimizationService: InventoryOptimizationService,
   ) {}
 
   async createOutboundOrder(dto: CreateOutboundOrderDto) {
@@ -878,5 +880,73 @@ export class OutboundService {
     }
 
     return shipment;
+  }
+
+  async recommendWarehouseBalancing(orderId: string) {
+    const tenantId = this.tenantContext.getTenantId();
+    const order = await this.prisma.outboundOrder.findFirst({
+      where: { id: orderId, tenantId } as any,
+      include: { lines: true },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Outbound order not found');
+    }
+
+    const warehouses = await this.prisma.warehouse.findMany({ where: { tenantId } as any });
+    const alternativeWarehouses = warehouses.map((wh) => wh.id).filter((id) => id !== order.warehouseId);
+    const recommendations = [] as any[];
+
+    for (const line of order.lines) {
+      const existingAllocation = new Prisma.Decimal(line.allocatedQty ?? 0);
+      const requestedQty = new Prisma.Decimal(line.requestedQty);
+
+      const availableAtHome = await this.prisma.inventory.groupBy({
+        where: {
+          tenantId,
+          productId: line.productId,
+          stockStatus: StockStatus.AVAILABLE,
+          location: { warehouseId: order.warehouseId, tenantId } as any,
+        } as any,
+        by: ['productId'],
+        _sum: { quantity: true },
+      });
+
+      const onHand = new Prisma.Decimal(availableAtHome[0]?._sum?.quantity ?? 0);
+      const remaining = requestedQty.minus(existingAllocation).minus(onHand);
+
+      if (remaining.lte(0)) {
+        continue;
+      }
+
+      const donorInventories = await this.prisma.inventory.findMany({
+        where: {
+          tenantId,
+          productId: line.productId,
+          stockStatus: StockStatus.AVAILABLE,
+          location: { warehouseId: { in: alternativeWarehouses }, tenantId } as any,
+        } as any,
+        include: { location: true },
+      });
+
+      const topDonor = donorInventories.sort((a, b) => Number(b.quantity) - Number(a.quantity))[0];
+      if (!topDonor) {
+        continue;
+      }
+
+      const quantityToMove = Math.min(Math.ceil(Number(remaining)), Math.ceil(Number(topDonor.quantity)));
+      const plan = await this.inventoryOptimizationService.planWarehouseBalance({
+        productId: line.productId,
+        sourceWarehouseId: topDonor.location.warehouseId,
+        targetWarehouseId: order.warehouseId,
+        quantity: quantityToMove,
+        uom: line.uom,
+        respectCapacity: true,
+      });
+
+      recommendations.push({ orderLineId: line.id, ...plan });
+    }
+
+    return { orderId, recommendations };
   }
 }
