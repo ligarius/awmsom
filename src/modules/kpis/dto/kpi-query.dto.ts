@@ -18,4 +18,20 @@ export class KpiQueryDto {
   @IsOptional()
   @IsString()
   productId?: string;
+
+  @IsOptional()
+  @IsString()
+  zone?: string;
+
+  @IsOptional()
+  @IsString()
+  operatorId?: string;
+
+  @IsOptional()
+  @IsString()
+  shiftStart?: string;
+
+  @IsOptional()
+  @IsString()
+  shiftEnd?: string;
 }
