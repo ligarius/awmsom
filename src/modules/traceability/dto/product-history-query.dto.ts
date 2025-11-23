@@ -1,6 +1,7 @@
 import { IsOptional, IsString } from 'class-validator';
+import { PaginationDto } from '../../../common/dto/pagination.dto';
 
-export class ProductHistoryQueryDto {
+export class ProductHistoryQueryDto extends PaginationDto {
   @IsString()
   productId!: string;
 

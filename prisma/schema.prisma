@@ -114,6 +114,12 @@ enum IntegrationJobStatus {
   FAILED
 }
 
+enum KpiType {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
 enum ShipmentStatus {
   PLANNED
   LOADING
@@ -209,6 +215,9 @@ model Tenant {
   integrationJobs      IntegrationJob[]
   usageMetrics         UsageMetric[]
   billingEvents        BillingEvent[]
+  inventorySnapshots   InventorySnapshot[]
+  kpiSnapshots         KpiSnapshot[]
+  customers            Customer[]
 }
 
 model SubscriptionPlan {
@@ -338,6 +347,9 @@ model Warehouse {
   warehouseZoneConfigs WarehouseZoneConfig[]
   inventoryPolicies    InventoryPolicy[]
   outboundRules        OutboundRule[]
+  inventories          Inventory[]
+  inventorySnapshots   InventorySnapshot[]
+  kpiSnapshots         KpiSnapshot[]
   tenant               Tenant                @relation(fields: [tenantId], references: [id])
 
   @@unique([tenantId, code])
@@ -396,6 +408,7 @@ model Product {
   pickingTaskLines     PickingTaskLine[]     @relation("PickingTaskLineProduct")
   handlingUnitLines    HandlingUnitLine[]
   inventoryPolicies    InventoryPolicy[]
+  inventorySnapshots   InventorySnapshot[]
 
   @@unique([tenantId, sku])
   @@index([tenantId])
@@ -423,6 +436,7 @@ model Batch {
   inventoryAdjustments InventoryAdjustment[]
   pickingTaskLines     PickingTaskLine[]     @relation("PickingTaskLineBatch")
   handlingUnitLines    HandlingUnitLine[]
+  inventorySnapshots   InventorySnapshot[]
 
   @@index([productId, batchCode])
   @@index([tenantId])
@@ -434,6 +448,7 @@ model Inventory {
   id          String      @id @default(uuid())
   tenantId    String
   productId   String
+  warehouseId String?
   batchId     String?
   locationId  String
   quantity    Decimal     @db.Decimal(20, 4)
@@ -448,10 +463,12 @@ model Inventory {
   product              Product               @relation(fields: [productId], references: [id])
   batch                Batch?                @relation(fields: [batchId], references: [id])
   location             Location              @relation(fields: [locationId], references: [id])
+  warehouse            Warehouse?            @relation(fields: [warehouseId], references: [id])
   inventoryAdjustments InventoryAdjustment[]
 
   @@index([productId, batchId, locationId])
   @@index([tenantId])
+  @@index([tenantId, warehouseId, productId, batchId])
 }
 
 model InboundReceipt {
@@ -544,6 +561,8 @@ model MovementLine {
   @@index([tenantId])
   @@index([tenantId, batchId])
   @@index([tenantId, productId, batchId])
+  @@index([tenantId, productId, createdAt])
+  @@index([tenantId, batchId, createdAt])
 }
 
 model CycleCountTask {
@@ -648,6 +667,8 @@ model OutboundOrder {
   @@index([tenantId])
   @@index([tenantId, customerId])
   @@index([tenantId, customerRef])
+  @@index([tenantId, requestedShipDate])
+  @@index([tenantId, status, requestedShipDate])
 }
 
 model Customer {
@@ -691,6 +712,8 @@ model OutboundOrderLine {
 
   @@index([outboundOrderId, productId])
   @@index([tenantId])
+  @@index([tenantId, productId])
+  @@index([tenantId, outboundOrderId])
 }
 
 model PickingTask {
@@ -712,6 +735,7 @@ model PickingTask {
 
   @@index([warehouseId, outboundOrderId, status])
   @@index([tenantId])
+  @@index([tenantId, completedAt])
 }
 
 model PickingTaskLine {
@@ -737,6 +761,7 @@ model PickingTaskLine {
 
   @@index([pickingTaskId, productId, batchId, fromLocationId])
   @@index([tenantId])
+  @@index([tenantId, productId])
 }
 
 model HandlingUnit {
@@ -1008,6 +1033,58 @@ model IntegrationJob {
 
   @@index([tenantId])
   @@index([tenantId, status])
+}
+
+model InventorySnapshot {
+  id           String   @id @default(uuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+
+  snapshotDate DateTime
+  warehouseId  String
+  warehouse    Warehouse @relation(fields: [warehouseId], references: [id])
+
+  productId    String
+  product      Product   @relation(fields: [productId], references: [id])
+
+  batchId      String?
+  batch        Batch?    @relation(fields: [batchId], references: [id])
+
+  quantity     Decimal
+  uom          String
+
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId, snapshotDate])
+  @@index([tenantId, snapshotDate, warehouseId])
+  @@index([tenantId, snapshotDate, warehouseId, productId, batchId])
+}
+
+model KpiSnapshot {
+  id           String   @id @default(uuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+
+  kpiType      KpiType
+  periodStart  DateTime
+  periodEnd    DateTime
+
+  warehouseId  String?
+  warehouse    Warehouse? @relation(fields: [warehouseId], references: [id])
+
+  fillRate            Decimal?
+  otif                Decimal?
+  inventoryTurnover   Decimal?
+  averageInventoryQty Decimal?
+  daysOfSupply        Decimal?
+  linesPerHour        Decimal?
+  unitsPerHour        Decimal?
+  pickingAccuracy     Decimal?
+
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId, kpiType, periodStart, periodEnd])
+  @@index([tenantId, kpiType, warehouseId, periodStart, periodEnd])
 }
 
 model UsageMetric {

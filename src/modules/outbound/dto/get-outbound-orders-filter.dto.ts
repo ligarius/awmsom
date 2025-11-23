@@ -1,7 +1,8 @@
 import { IsDateString, IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
 import { OutboundOrderStatus } from '@prisma/client';
+import { PaginationDto } from '../../../common/dto/pagination.dto';
 
-export class GetOutboundOrdersFilterDto {
+export class GetOutboundOrdersFilterDto extends PaginationDto {
   @IsOptional()
   @IsUUID()
   warehouseId?: string;

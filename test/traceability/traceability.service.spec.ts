@@ -1,5 +1,7 @@
 import { TraceabilityService } from '../../src/modules/traceability/traceability.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { CacheService } from '../../src/common/cache/cache.service';
+import { PaginationService } from '../../src/common/pagination/pagination.service';
 
 describe('TraceabilityService', () => {
   let prisma: any;
@@ -19,7 +21,11 @@ describe('TraceabilityService', () => {
       inventory: { findMany: jest.fn() },
     } as unknown as PrismaService;
 
-    service = new TraceabilityService(prisma);
+    service = new TraceabilityService(
+      prisma,
+      new CacheService({ get: jest.fn(), set: jest.fn(), del: jest.fn() } as any),
+      new PaginationService(),
+    );
   });
 
   it('builds batch trace with inbound, movements and outbound elements', async () => {
