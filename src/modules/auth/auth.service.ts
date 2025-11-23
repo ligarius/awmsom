@@ -61,23 +61,16 @@ export class AuthService {
     return code;
   }
 
-  private validateMfaCode(code: string, factor: any) {
+  private validateMfaCode(code: string, factor: any, challenge: any) {
+    if (!challenge?.code) {
+      return false;
+    }
+
     if (!factor?.secret) {
       throw new UnauthorizedException('MFA secret not configured');
     }
 
-    if (factor.type === 'totp') {
-      const window = 1;
-      for (let i = -window; i <= window; i++) {
-        const timestamp = Date.now() + i * 30000;
-        if (this.generateTotpCode(factor.secret, timestamp) === code) {
-          return true;
-        }
-      }
-      return false;
-    }
-
-    return code === factor.secret;
+    return code === challenge.code;
   }
 
   private deliverMfaCode(factor: any, code: string) {
@@ -117,7 +110,7 @@ export class AuthService {
   private async upsertChallenge(user: any, factor: any) {
     const prisma = this.prisma as any;
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-    const code = factor.type === 'totp' ? this.generateTotpCode(factor.secret) : factor.secret;
+    const code = factor.type === 'totp' ? this.generateTotpCode(factor.secret) : this.generateMfaCode();
 
     const challenge = await prisma.mfaChallenge.create({
       data: {
@@ -241,14 +234,14 @@ export class AuthService {
       throw new UnauthorizedException('Invalid MFA factor');
     }
 
-    const isValid = this.validateMfaCode(dto.code, factor);
+    const isValid = this.validateMfaCode(dto.code, factor, challenge);
     if (!isValid) {
       throw new UnauthorizedException('Invalid MFA code');
     }
 
     await prisma.mfaChallenge.update({
       where: { id: dto.challengeId },
-      data: { consumedAt: new Date() },
+      data: { consumedAt: new Date(), code: null },
     });
 
     const user = await prisma.user.findUnique({ where: { id: challenge.userId } });
