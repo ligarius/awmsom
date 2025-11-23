@@ -117,11 +117,22 @@ export class AuthService {
     return Buffer.from(bytes);
   }
 
+  private getTotpEncryptionKey() {
+    const key = process.env.TOTP_ENCRYPTION_KEY;
+
+    if (!key) {
+      throw new UnauthorizedException('TOTP encryption key is not configured');
+    }
+
+    if (Buffer.byteLength(key, 'utf8') < 32) {
+      throw new UnauthorizedException('TOTP encryption key is too weak');
+    }
+
+    return crypto.createHash('sha256').update(key).digest();
+  }
+
   private encryptTotpSecret(secret: string) {
-    const key = crypto
-      .createHash('sha256')
-      .update(process.env.TOTP_ENCRYPTION_KEY ?? 'default_totp_encryption_key')
-      .digest();
+    const key = this.getTotpEncryptionKey();
     const iv = crypto.randomBytes(12);
     const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
     const encrypted = Buffer.concat([cipher.update(secret, 'utf8'), cipher.final()]);
@@ -136,10 +147,7 @@ export class AuthService {
       throw new UnauthorizedException('MFA secret not configured');
     }
 
-    const key = crypto
-      .createHash('sha256')
-      .update(process.env.TOTP_ENCRYPTION_KEY ?? 'default_totp_encryption_key')
-      .digest();
+    const key = this.getTotpEncryptionKey();
     const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivB64, 'base64'));
     decipher.setAuthTag(Buffer.from(authTagB64, 'base64'));
     const decrypted = Buffer.concat([
@@ -312,6 +320,10 @@ export class AuthService {
     }
     if (!tenant.isActive) {
       throw new UnauthorizedException('Tenant inactive');
+    }
+
+    if (dto.type === 'totp') {
+      this.getTotpEncryptionKey();
     }
 
     const secret = dto.type === 'totp' ? this.generateTotpSecret() : this.generateMfaCode();
