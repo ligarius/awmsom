@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditLogInput } from './audit.interfaces';
+import { PaginationService } from '../../common/pagination/pagination.service';
 
 @Injectable()
 export class AuditService {
@@ -9,7 +10,7 @@ export class AuditService {
   private readonly events: any[] = [];
   private readonly traces: any[] = [];
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly pagination: PaginationService) {}
 
   async recordLog(entry: AuditLogInput) {
     try {
@@ -34,11 +35,13 @@ export class AuditService {
     }
   }
 
-  async getLogs(tenantId: string, limit = 100) {
+  async getLogs(tenantId: string, page = 1, limit = 100) {
+    const { skip, take } = this.pagination.buildPaginationParams(page, limit);
     return this.prisma.auditLog.findMany({
       where: { tenantId },
       orderBy: { createdAt: 'desc' },
-      take: limit,
+      skip,
+      take,
     });
   }
 

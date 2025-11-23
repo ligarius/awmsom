@@ -1,6 +1,7 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { TenantContextService } from '../../common/tenant-context.service';
 import { AuditService } from './audit.service';
+import { PaginationDto } from '../../common/dto/pagination.dto';
 
 @Controller('audit')
 export class AuditController {
@@ -20,8 +21,8 @@ export class AuditController {
   }
 
   @Get('logs')
-  getLogs(@Query('limit') limit?: number) {
+  getLogs(@Query() query: PaginationDto) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.auditService.getLogs(tenantId, limit ? Number(limit) : 100);
+    return this.auditService.getLogs(tenantId, query.page, query.limit);
   }
 }

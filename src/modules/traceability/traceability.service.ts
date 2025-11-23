@@ -4,12 +4,34 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { BatchTraceQueryDto } from './dto/batch-trace-query.dto';
 import { CustomerTraceQueryDto } from './dto/customer-trace-query.dto';
 import { ProductHistoryQueryDto } from './dto/product-history-query.dto';
+import { CacheService } from '../../common/cache/cache.service';
+import { PaginationService } from '../../common/pagination/pagination.service';
+
+const TRACE_CACHE_TTL = parseInt(process.env.TRACE_CACHE_TTL ?? '120', 10);
 
 @Injectable()
 export class TraceabilityService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: CacheService,
+    private readonly pagination: PaginationService,
+  ) {}
 
   async getBatchTrace(tenantId: string, dto: BatchTraceQueryDto) {
+    const cacheKey = this.cache.buildKey('trace:batch', [
+      tenantId,
+      dto.batchCode,
+      dto.productId,
+      dto.warehouseId,
+      dto.page,
+      dto.limit,
+    ]);
+    const cached = await this.cache.getJson<any>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const pagination = this.pagination.buildPaginationParams(dto.page, dto.limit);
     const batch = (await this.prisma.batch.findFirst({
       where: {
         tenantId,
@@ -31,6 +53,8 @@ export class TraceabilityService {
         inboundReceipt: dto.warehouseId ? { warehouseId: dto.warehouseId } : undefined,
       } as Prisma.InboundReceiptLineWhereInput,
       include: { inboundReceipt: true },
+      orderBy: { createdAt: 'asc' },
+      ...pagination,
     });
 
     const receipts = Object.values(
@@ -65,6 +89,7 @@ export class TraceabilityService {
       },
       include: { movementHeader: true },
       orderBy: { createdAt: 'asc' },
+      ...pagination,
     });
 
     const internalMovements = movementLines.map((line) => ({
@@ -85,6 +110,8 @@ export class TraceabilityService {
         pickingTaskLines: { some: { batchId: batch.id } },
       },
       include: { outboundOrder: { include: { customer: true } }, pickingTaskLines: true } as any,
+      orderBy: { createdAt: 'desc' },
+      ...pagination,
     })) as any[];
 
     const outboundOrders = outboundLines.map((line: any) => ({
@@ -115,6 +142,8 @@ export class TraceabilityService {
         handlingUnit: { include: { shipments: { include: { shipment: true } } } },
         outboundOrder: true,
       } as any,
+      orderBy: { createdAt: 'desc' },
+      ...pagination,
     })) as any[];
 
     const shipmentsMap: Record<string, any> = {};
@@ -136,7 +165,7 @@ export class TraceabilityService {
       });
     });
 
-    return {
+    const response = {
       batch: {
         id: batch.id,
         code: batch.code || batch.batchCode,
@@ -153,9 +182,26 @@ export class TraceabilityService {
         shipments: Object.values(shipmentsMap),
       },
     };
+
+    await this.cache.setJson(cacheKey, response, TRACE_CACHE_TTL);
+    return response;
   }
 
   async getCustomerShipmentsTrace(tenantId: string, dto: CustomerTraceQueryDto) {
+    const cacheKey = this.cache.buildKey('trace:customer', [
+      tenantId,
+      dto.customerId ?? dto.customerCode,
+      dto.fromDate,
+      dto.toDate,
+      dto.page,
+      dto.limit,
+    ]);
+    const cached = await this.cache.getJson<any>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const pagination = this.pagination.buildPaginationParams(dto.page, dto.limit);
     const customer = await (this.prisma as any).customer.findFirst({
       where: {
         tenantId,
@@ -190,6 +236,8 @@ export class TraceabilityService {
           },
         } as any,
       },
+      orderBy: { actualDeparture: 'desc' },
+      ...pagination,
     });
 
     const formatted = shipments.map((shipment: any) => ({
@@ -209,11 +257,13 @@ export class TraceabilityService {
       })),
     }));
 
-    return {
+    const response = {
       customer: { id: customer.id, code: customer.code, name: customer.name },
       period: { from, to },
       shipments: formatted,
     };
+    await this.cache.setJson(cacheKey, response, TRACE_CACHE_TTL);
+    return response;
   }
 
   async getProductHistory(tenantId: string, dto: ProductHistoryQueryDto) {
@@ -224,6 +274,7 @@ export class TraceabilityService {
 
     const from = new Date(dto.fromDate);
     const to = new Date(dto.toDate);
+    const pagination = this.pagination.buildPaginationParams(dto.page, dto.limit);
 
     const inbound = (await this.prisma.inboundReceiptLine.findMany({
       where: {
@@ -234,6 +285,8 @@ export class TraceabilityService {
         ...(dto.batchCode ? { OR: [{ batchCode: dto.batchCode }, { batch: { batchCode: dto.batchCode } as any }] } : {}),
       } as any,
       include: { inboundReceipt: true, batch: true } as any,
+      orderBy: { createdAt: 'desc' },
+      ...pagination,
     })) as any[];
 
     const outbound = (await this.prisma.outboundOrderLine.findMany({
@@ -249,6 +302,8 @@ export class TraceabilityService {
           : {}),
       } as any,
       include: { outboundOrder: true, pickingTaskLines: { include: { batch: true } } } as any,
+      orderBy: { createdAt: 'desc' },
+      ...pagination,
     })) as any[];
 
     const movements = (await this.prisma.movementLine.findMany({
@@ -260,6 +315,8 @@ export class TraceabilityService {
         ...(dto.batchCode ? { OR: [{ batch: { batchCode: dto.batchCode } as any }, { batchCode: dto.batchCode }] } : {}),
       } as any,
       include: { movementHeader: true, batch: true } as any,
+      orderBy: { createdAt: 'desc' },
+      ...pagination,
     })) as any[];
 
     const inventorySnapshots = (await this.prisma.inventory.findMany({
@@ -270,6 +327,8 @@ export class TraceabilityService {
         location: dto.warehouseId ? { warehouseId: dto.warehouseId } : undefined,
       } as any,
       include: { batch: true } as any,
+      orderBy: { createdAt: 'desc' },
+      ...pagination,
     })) as any[];
 
     return {

@@ -14,6 +14,7 @@ import { ConfirmInboundReceiptDto } from './dto/confirm-inbound-receipt.dto';
 import { GetInboundReceiptsFilterDto } from './dto/get-inbound-receipts-filter.dto';
 import { TenantContextService } from '../../common/tenant-context.service';
 import { ConfigService } from '../config/config.service';
+import { PaginationService } from '../../common/pagination/pagination.service';
 
 @Injectable()
 export class InboundService {
@@ -22,6 +23,7 @@ export class InboundService {
     private readonly inventoryService: InventoryService,
     private readonly tenantContext: TenantContextService,
     private readonly configService: ConfigService,
+    private readonly pagination: PaginationService,
   ) {}
 
   async createReceipt(dto: CreateInboundReceiptDto) {
@@ -92,6 +94,7 @@ export class InboundService {
 
   async listReceipts(filters: GetInboundReceiptsFilterDto) {
     const tenantId = this.tenantContext.getTenantId();
+    const { skip, take } = this.pagination.buildPaginationParams(filters.page, filters.limit);
 
     return this.prisma.inboundReceipt.findMany({
       where: {
@@ -104,6 +107,9 @@ export class InboundService {
         },
       } as any,
       include: { lines: { where: { tenantId } as any } } as any,
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take,
     });
   }
 
