@@ -153,6 +153,21 @@ describe('Auth module', () => {
     expect(prisma.users[0].passwordHash).not.toBe('newpassword');
   });
 
+  it('validates tenant existence and activity when finding users', async () => {
+    const tenant = prisma.tenant.create({ data: { name: 'Tenant', code: 'T5b', plan: 'pro' } });
+    const inactiveTenant = prisma.tenant.create({
+      data: { name: 'Inactive', code: 'T5c', plan: 'pro', isActive: false },
+    });
+
+    await authService.register({ email: 'active@example.com', password: 'secret123', tenantId: tenant.id });
+    prisma.user.create({
+      data: { email: 'inactive@example.com', tenantId: inactiveTenant.id, passwordHash: 'hash', isActive: true },
+    });
+
+    await expect(authService.findUser('missing-tenant', 'ghost@example.com')).rejects.toThrow('Tenant not found');
+    await expect(authService.findUser(inactiveTenant.id, 'inactive@example.com')).rejects.toThrow('Tenant inactive');
+  });
+
   it('lists users by tenant with active tenant validation', async () => {
     const tenant = prisma.tenant.create({ data: { name: 'Tenant', code: 'T6', plan: 'pro' } });
     const inactiveTenant = prisma.tenant.create({
@@ -167,6 +182,7 @@ describe('Auth module', () => {
     expect(users.every((u: any) => !('passwordHash' in u))).toBe(true);
 
     await expect(authService.listUsers(inactiveTenant.id)).rejects.toThrow('Tenant inactive');
+    await expect(authService.listUsers('missing-tenant')).rejects.toThrow('Tenant not found');
   });
 
   it('deactivates a user and prevents double deactivation', async () => {

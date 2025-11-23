@@ -101,6 +101,14 @@ export class AuthService {
 
   async findUser(tenantId: string, email: string) {
     const prisma = this.prisma as any;
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found');
+    }
+    if (!tenant.isActive) {
+      throw new UnauthorizedException('Tenant inactive');
+    }
+
     const user = await prisma.user.findFirst({ where: { tenantId, email } });
     if (!user) {
       throw new NotFoundException('User not found');
