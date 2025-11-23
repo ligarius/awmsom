@@ -113,6 +113,11 @@ describe('Auth module', () => {
     authService = new AuthService(prisma as any, undefined as any, userAccountService as any);
     process.env.OAUTH_OIDC_DEMO_SECRET = providerSecret;
     process.env.OAUTH_OIDC_DEMO_AUDIENCE = providerAudience;
+    process.env.TOTP_ENCRYPTION_KEY = '12345678901234567890123456789012';
+  });
+
+  afterEach(() => {
+    delete process.env.TOTP_ENCRYPTION_KEY;
   });
 
   it('registers users with hashed passwords and prevents duplicates per tenant', async () => {
@@ -311,6 +316,26 @@ describe('Auth module', () => {
     await expect(authService.verifyMfa({ challengeId: challenge.id, code: '222222' } as any)).rejects.toThrow(
       'TOTP secret too short',
     );
+  });
+
+  it('rejects TOTP enrollment when encryption key is missing', async () => {
+    delete process.env.TOTP_ENCRYPTION_KEY;
+    const tenant = prisma.tenant.create({ data: { name: 'Tenant', code: 'T-MFA-NOKEY', plan: 'pro' } });
+    const user = await authService.register({ email: 'missingkey@example.com', password: 'secret123', tenantId: tenant.id });
+
+    await expect(
+      authService.enrollFactor({ userId: user.id, tenantId: tenant.id, type: 'totp', label: 'auth-app' }),
+    ).rejects.toThrow('TOTP encryption key is not configured');
+  });
+
+  it('rejects TOTP enrollment when encryption key is too weak', async () => {
+    process.env.TOTP_ENCRYPTION_KEY = 'short-key';
+    const tenant = prisma.tenant.create({ data: { name: 'Tenant', code: 'T-MFA-WEAKKEY', plan: 'pro' } });
+    const user = await authService.register({ email: 'weakkey@example.com', password: 'secret123', tenantId: tenant.id });
+
+    await expect(
+      authService.enrollFactor({ userId: user.id, tenantId: tenant.id, type: 'totp', label: 'auth-app' }),
+    ).rejects.toThrow('TOTP encryption key is too weak');
   });
 
   it('supports logging in via OAuth provider mapping identities to users', async () => {
