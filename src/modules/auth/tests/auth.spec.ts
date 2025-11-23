@@ -184,10 +184,67 @@ describe('Auth module', () => {
     expect(firstStep.factor.id).toBe(factor.id);
     expect(firstStep.code).toBeUndefined();
 
-    const totpCode = (authService as any).generateTotpCode(factor.secret);
+    const challenge = prisma.mfaChallenges.find((c) => c.id === firstStep.challengeId);
+    const totpCode = challenge?.code;
 
     const verified = await authService.verifyMfa({ challengeId: firstStep.challengeId, code: totpCode } as any);
     expect(verified.access_token).toBeDefined();
+  });
+
+  it('rejects reused MFA codes by challenge', async () => {
+    const tenant = prisma.tenant.create({ data: { name: 'Tenant', code: 'T-MFA2', plan: 'pro' } });
+    const user = await authService.register({ email: 'reuse@example.com', password: 'secret123', tenantId: tenant.id });
+
+    const factor = await authService.enrollFactor({
+      userId: user.id,
+      tenantId: tenant.id,
+      type: 'sms',
+      label: 'sms-device',
+    });
+
+    const firstStep = (await authService.login({
+      email: 'reuse@example.com',
+      password: 'secret123',
+      tenantId: tenant.id,
+    })) as any;
+
+    const challenge = prisma.mfaChallenges.find((c) => c.id === firstStep.challengeId);
+    const verified = await authService.verifyMfa({ challengeId: firstStep.challengeId, code: challenge?.code } as any);
+
+    expect(verified.access_token).toBeDefined();
+    expect(challenge?.consumedAt).toBeInstanceOf(Date);
+    expect(challenge?.code).toBeNull();
+
+    await expect(
+      authService.verifyMfa({ challengeId: firstStep.challengeId, code: challenge?.code ?? '' } as any),
+    ).rejects.toThrow('Challenge already used');
+  });
+
+  it('rejects expired MFA challenges', async () => {
+    const tenant = prisma.tenant.create({ data: { name: 'Tenant', code: 'T-MFA3', plan: 'pro' } });
+    const user = await authService.register({ email: 'expired@example.com', password: 'secret123', tenantId: tenant.id });
+
+    const factor = await authService.enrollFactor({
+      userId: user.id,
+      tenantId: tenant.id,
+      type: 'email',
+      label: 'email-device',
+    });
+
+    const expiredChallenge = prisma.mfaChallenge.create({
+      data: {
+        userId: user.id,
+        tenantId: tenant.id,
+        factorId: factor.id,
+        code: '123456',
+        expiresAt: new Date(Date.now() - 60 * 1000),
+        channelHint: 'email-device',
+      },
+    });
+
+    await expect(
+      authService.verifyMfa({ challengeId: expiredChallenge.id, code: '123456' } as any),
+    ).rejects.toThrow('Challenge expired');
   });
 
   it('supports logging in via OAuth provider mapping identities to users', async () => {
