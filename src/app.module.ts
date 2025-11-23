@@ -23,6 +23,9 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { ExternalModule } from './modules/external/external.module';
 import { RateLimitService } from './common/rate-limit.service';
+import { OnboardingModule } from './modules/onboarding/onboarding.module';
+import { PlansModule } from './modules/plans/plans.module';
+import { UsageModule } from './modules/usage/usage.module';
 
 @Module({
   imports: [
@@ -46,6 +49,9 @@ import { RateLimitService } from './common/rate-limit.service';
     AuditModule,
     MonitoringModule,
     RbacModule,
+    OnboardingModule,
+    PlansModule,
+    UsageModule,
   ],
   providers: [
     RateLimitService,

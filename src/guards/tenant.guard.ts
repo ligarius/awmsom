@@ -9,7 +9,12 @@ export class TenantGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const path: string = request.path || '';
 
-    if (path.startsWith('/auth/login') || path.startsWith('/tenants')) {
+    if (
+      path.startsWith('/auth/login') ||
+      path.startsWith('/tenants') ||
+      path.startsWith('/public/onboarding') ||
+      path.startsWith('/admin')
+    ) {
       return true;
     }
 
