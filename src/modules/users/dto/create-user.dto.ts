@@ -9,12 +9,8 @@ export class CreateUserDto {
   password!: string;
 
   @IsString()
-  @IsNotEmpty()
-  tenantId!: string;
-
-  @IsString()
   @IsOptional()
-  roleId?: string;
+  tenantId?: string;
 
   @IsBoolean()
   @IsOptional()

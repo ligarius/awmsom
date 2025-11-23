@@ -1,11 +1,10 @@
-export interface AuditEvent {
-  timestamp: string;
-  method: string;
-  path: string;
-  details?: Record<string, unknown>;
-}
-
-export interface AuditTrace extends AuditEvent {
-  statusCode: number;
-  durationMs: number;
+export interface AuditLogInput {
+  tenantId: string;
+  userId?: string;
+  resource: string;
+  action: string;
+  entityId?: string;
+  metadata?: unknown;
+  ipAddress?: string;
+  userAgent?: string;
 }

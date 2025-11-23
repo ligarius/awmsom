@@ -10,6 +10,7 @@ import {
   Put,
   Query,
 } from '@nestjs/common';
+import { PermissionAction, PermissionResource } from '@prisma/client';
 import { WarehouseApplicationService } from './application/services/warehouse.application-service';
 import {
   WarehouseCodeAlreadyExistsError,
@@ -20,6 +21,7 @@ import { QueryWarehousesDto } from './infrastructure/http/dto/query-warehouses.d
 import { UpdateWarehouseDto } from './infrastructure/http/dto/update-warehouse.dto';
 import { WarehouseHttpMapper } from './infrastructure/http/mappers/warehouse.mapper';
 import { TenantContextService } from '../../common/tenant-context.service';
+import { Permissions } from '../../decorators/permissions.decorator';
 
 @Controller('warehouses')
 export class WarehousesController {
@@ -29,6 +31,7 @@ export class WarehousesController {
   ) {}
 
   @Post()
+  @Permissions(PermissionResource.WAREHOUSE, PermissionAction.CREATE)
   async create(@Body() dto: CreateWarehouseDto) {
     try {
       const warehouse = await this.warehouseApp.createWarehouse({
@@ -42,6 +45,7 @@ export class WarehousesController {
   }
 
   @Get()
+  @Permissions(PermissionResource.WAREHOUSE, PermissionAction.READ)
   async list(@Query() query: QueryWarehousesDto) {
     try {
       const { data, total } = await this.warehouseApp.listWarehouses(query);
@@ -59,6 +63,7 @@ export class WarehousesController {
   }
 
   @Get(':id')
+  @Permissions(PermissionResource.WAREHOUSE, PermissionAction.READ)
   async findOne(@Param('id') id: string) {
     try {
       const warehouse = await this.warehouseApp.getWarehouse(id);
@@ -69,6 +74,7 @@ export class WarehousesController {
   }
 
   @Put(':id')
+  @Permissions(PermissionResource.WAREHOUSE, PermissionAction.UPDATE)
   async update(@Param('id') id: string, @Body() dto: UpdateWarehouseDto) {
     try {
       const warehouse = await this.warehouseApp.updateWarehouse(id, dto);
@@ -79,6 +85,7 @@ export class WarehousesController {
   }
 
   @Delete(':id')
+  @Permissions(PermissionResource.WAREHOUSE, PermissionAction.DELETE)
   async delete(@Param('id') id: string) {
     try {
       await this.warehouseApp.deleteWarehouse(id);
