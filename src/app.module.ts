@@ -26,6 +26,8 @@ import { RateLimitService } from './common/rate-limit.service';
 import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { PlansModule } from './modules/plans/plans.module';
 import { UsageModule } from './modules/usage/usage.module';
+import { TraceabilityModule } from './modules/traceability/traceability.module';
+import { KpisModule } from './modules/kpis/kpis.module';
 
 @Module({
   imports: [
@@ -52,6 +54,8 @@ import { UsageModule } from './modules/usage/usage.module';
     OnboardingModule,
     PlansModule,
     UsageModule,
+    TraceabilityModule,
+    KpisModule,
   ],
   providers: [
     RateLimitService,
