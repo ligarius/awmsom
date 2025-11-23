@@ -15,6 +15,19 @@ export class MaintenanceProcessor {
       await this.prisma.auditLog.deleteMany({ where: { tenantId: job.data.tenantId, createdAt: { lt: threshold } } });
       await this.prisma.kpiSnapshot.deleteMany({ where: { tenantId: job.data.tenantId, createdAt: { lt: threshold } } });
       await this.prisma.inventorySnapshot.deleteMany({ where: { tenantId: job.data.tenantId, createdAt: { lt: threshold } } });
+    } else if (job.data.action === 'purge-expired-audit-logs') {
+      const retentionWindow = job.data.olderThanDays ?? 365;
+      const fallbackThreshold = new Date();
+      fallbackThreshold.setDate(fallbackThreshold.getDate() - retentionWindow);
+      await this.prisma.auditLog.deleteMany({
+        where: {
+          tenantId: job.data.tenantId,
+          OR: [
+            { expiresAt: { lte: new Date() } },
+            { expiresAt: null, createdAt: { lt: fallbackThreshold } },
+          ],
+        },
+      });
     }
   }
 }

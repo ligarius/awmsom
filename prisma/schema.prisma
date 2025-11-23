@@ -365,6 +365,8 @@ model AuditLog {
   action    String
   entityId  String?
   metadata  Json?
+  encryptedPayload String?
+  expiresAt DateTime?
 
   ipAddress String?
   userAgent String?
@@ -374,6 +376,7 @@ model AuditLog {
   @@index([tenantId])
   @@index([tenantId, resource])
   @@index([tenantId, userId])
+  @@index([tenantId, expiresAt])
 }
 
 model Warehouse {

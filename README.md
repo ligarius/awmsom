@@ -12,6 +12,10 @@ AWMSOM es una base para un WMS modular escrito en NestJS y TypeScript. El objeti
 - Node.js 20+
 - PostgreSQL accesible y variable `DATABASE_URL` configurada (por ejemplo `postgresql://user:pass@localhost:5432/awmsom`).
 
+### Variables de entorno clave
+- `AUDIT_LOG_ENCRYPTION_KEY`: cadena base64 de 32 bytes (AES-256) usada para cifrar en reposo la metadata de auditoría.
+- `AUDIT_LOG_RETENTION_DAYS`: ventana de retención en días para calcular `expiresAt` y el purgado automático de auditoría (por defecto 365).
+
 ## Puesta en marcha
 1. Instalar dependencias:
    ```bash
