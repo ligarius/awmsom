@@ -18,6 +18,11 @@ import { ConfigModule as TenantConfigModule } from './modules/config/config.modu
 import { TenantGuard } from './guards/tenant.guard';
 import { PermissionsGuard } from './guards/permissions.guard';
 import { RbacModule } from './modules/rbac/rbac.module';
+import { ApiKeysModule } from './modules/api-keys/api-keys.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
+import { WebhooksModule } from './modules/webhooks/webhooks.module';
+import { ExternalModule } from './modules/external/external.module';
+import { RateLimitService } from './common/rate-limit.service';
 
 @Module({
   imports: [
@@ -34,11 +39,16 @@ import { RbacModule } from './modules/rbac/rbac.module';
     InboundModule,
     OutboundModule,
     IntegrationModule,
+    ApiKeysModule,
+    IntegrationsModule,
+    WebhooksModule,
+    ExternalModule,
     AuditModule,
     MonitoringModule,
     RbacModule,
   ],
   providers: [
+    RateLimitService,
     {
       provide: APP_GUARD,
       useClass: TenantGuard,

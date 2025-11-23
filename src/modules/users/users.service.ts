@@ -7,7 +7,7 @@ import { CreateUserPayload, UserAccountService } from './user-account.service';
 export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly userAccountService: UserAccountService,
+    private readonly userAccountService?: UserAccountService,
   ) {}
 
   async createUser(tenantIdOrDto: string | CreateUserDto, dtoMaybe?: CreateUserDto) {
@@ -28,7 +28,8 @@ export class UsersService {
       isActive: dto.isActive,
     };
 
-    return this.userAccountService.createUser(payload);
+    const accountService = this.userAccountService ?? new UserAccountService(this.prisma);
+    return accountService.createUser(payload);
   }
 
   async findByEmail(email: string, tenantId: string) {
