@@ -13,7 +13,16 @@ export class TenantGuard implements CanActivate {
       return true;
     }
 
-    const user = request.user;
+    let user = request.user;
+    if (!user && request.headers?.authorization) {
+      const token = (request.headers.authorization as string).replace('Bearer ', '');
+      try {
+        user = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
+        request.user = user;
+      } catch (error) {
+        throw new ForbiddenException('Invalid authentication token');
+      }
+    }
 
     if (!user?.tenantId) {
       throw new ForbiddenException('Tenant is required');
