@@ -3,9 +3,10 @@ import { OutboundController } from './outbound.controller';
 import { OutboundService } from './outbound.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { ConfigModule } from '../config/config.module';
+import { InventoryModule } from '../inventory/inventory.module';
 
 @Module({
-  imports: [PrismaModule, ConfigModule],
+  imports: [PrismaModule, ConfigModule, InventoryModule],
   controllers: [OutboundController],
   providers: [OutboundService],
   exports: [OutboundService],
