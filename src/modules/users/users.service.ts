@@ -1,10 +1,14 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { CreateUserPayload, UserAccountService } from './user-account.service';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly userAccountService: UserAccountService,
+  ) {}
 
   async createUser(tenantIdOrDto: string | CreateUserDto, dtoMaybe?: CreateUserDto) {
     const dto = (typeof tenantIdOrDto === 'string' ? dtoMaybe : tenantIdOrDto) as CreateUserDto | undefined;
@@ -17,28 +21,14 @@ export class UsersService {
       throw new BadRequestException('Tenant is required');
     }
 
-    const prisma = this.prisma as any;
-    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
-    if (!tenant) {
-      throw new BadRequestException('Tenant not found');
-    }
-    if (!tenant.isActive) {
-      throw new BadRequestException('Tenant is inactive');
-    }
+    const payload: CreateUserPayload = {
+      email: dto.email,
+      password: dto.password,
+      tenantId,
+      isActive: dto.isActive,
+    };
 
-    const existing = await prisma.user.findFirst({ where: { tenantId, email: dto.email } });
-    if (existing) {
-      throw new BadRequestException('User already exists');
-    }
-
-    return prisma.user.create({
-      data: {
-        email: dto.email,
-        passwordHash: dto.password,
-        tenantId,
-        isActive: dto.isActive ?? true,
-      },
-    });
+    return this.userAccountService.createUser(payload);
   }
 
   async findByEmail(email: string, tenantId: string) {
