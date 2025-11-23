@@ -16,6 +16,8 @@ import { MonitoringModule } from './modules/monitoring/monitoring.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { ConfigModule as TenantConfigModule } from './modules/config/config.module';
 import { TenantGuard } from './guards/tenant.guard';
+import { PermissionsGuard } from './guards/permissions.guard';
+import { RbacModule } from './modules/rbac/rbac.module';
 
 @Module({
   imports: [
@@ -34,11 +36,16 @@ import { TenantGuard } from './guards/tenant.guard';
     IntegrationModule,
     AuditModule,
     MonitoringModule,
+    RbacModule,
   ],
   providers: [
     {
       provide: APP_GUARD,
       useClass: TenantGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: PermissionsGuard,
     },
   ],
 })

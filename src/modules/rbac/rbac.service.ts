@@ -1,0 +1,199 @@
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { PermissionAction, PermissionResource } from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
+import { CreateRoleDto } from './dto/create-role.dto';
+import { UpdateRoleDto } from './dto/update-role.dto';
+import { AssignRoleDto } from './dto/assign-role.dto';
+import { SetRolePermissionsDto } from './dto/set-role-permissions.dto';
+
+@Injectable()
+export class RbacService {
+  constructor(private readonly prisma: PrismaService, private readonly auditService: AuditService) {}
+
+  async createRole(tenantId: string, dto: CreateRoleDto, actorUserId?: string) {
+    const role = await this.prisma.role.create({
+      data: {
+        tenantId,
+        name: dto.name,
+        description: dto.description,
+        isSystem: dto.isSystem ?? false,
+      },
+    });
+
+    await this.auditService.recordLog({
+      tenantId,
+      userId: actorUserId,
+      resource: PermissionResource.ROLES,
+      action: PermissionAction.CREATE,
+      entityId: role.id,
+      metadata: { role },
+    });
+
+    return role;
+  }
+
+  async updateRole(tenantId: string, roleId: string, dto: UpdateRoleDto, actorUserId?: string) {
+    const existing = await this.prisma.role.findFirst({ where: { id: roleId, tenantId } });
+    if (!existing) {
+      throw new NotFoundException('Role not found');
+    }
+
+    const role = await this.prisma.role.update({ where: { id: roleId }, data: dto });
+
+    await this.auditService.recordLog({
+      tenantId,
+      userId: actorUserId,
+      resource: PermissionResource.ROLES,
+      action: PermissionAction.UPDATE,
+      entityId: role.id,
+      metadata: { before: existing, after: role },
+    });
+
+    return role;
+  }
+
+  async deleteRole(tenantId: string, roleId: string, actorUserId?: string) {
+    const role = await this.prisma.role.findFirst({ where: { id: roleId, tenantId } });
+    if (!role) {
+      throw new NotFoundException('Role not found');
+    }
+
+    if (role.isSystem) {
+      throw new BadRequestException('System roles cannot be deleted');
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.userRole.deleteMany({ where: { roleId } }),
+      this.prisma.rolePermission.deleteMany({ where: { roleId } }),
+      this.prisma.role.delete({ where: { id: roleId } }),
+    ]);
+
+    await this.auditService.recordLog({
+      tenantId,
+      userId: actorUserId,
+      resource: PermissionResource.ROLES,
+      action: PermissionAction.DELETE,
+      entityId: role.id,
+      metadata: { role },
+    });
+
+    return { message: 'Role deleted' };
+  }
+
+  async setRolePermissions(tenantId: string, roleId: string, dto: SetRolePermissionsDto, actorUserId?: string) {
+    const role = await this.prisma.role.findFirst({ where: { id: roleId, tenantId } });
+    if (!role) {
+      throw new NotFoundException('Role not found');
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.rolePermission.deleteMany({ where: { roleId } }),
+      this.prisma.rolePermission.createMany({
+        data: dto.permissions.map((permission) => ({
+          roleId,
+          resource: permission.resource,
+          action: permission.action,
+        })),
+      }),
+    ]);
+
+    await this.auditService.recordLog({
+      tenantId,
+      userId: actorUserId,
+      resource: PermissionResource.ROLES,
+      action: PermissionAction.CONFIG,
+      entityId: roleId,
+      metadata: { permissions: dto.permissions },
+    });
+
+    return this.prisma.rolePermission.findMany({ where: { roleId } });
+  }
+
+  async assignRoleToUser(tenantId: string, dto: AssignRoleDto, actorUserId?: string) {
+    const [user, role] = await Promise.all([
+      this.prisma.user.findFirst({ where: { id: dto.userId, tenantId } }),
+      this.prisma.role.findFirst({ where: { id: dto.roleId, tenantId } }),
+    ]);
+
+    if (!user) {
+      throw new NotFoundException('User not found for tenant');
+    }
+    if (!role) {
+      throw new NotFoundException('Role not found for tenant');
+    }
+
+    const assignment = await this.prisma.userRole.upsert({
+      where: { userId_roleId: { userId: dto.userId, roleId: dto.roleId } },
+      create: { userId: dto.userId, roleId: dto.roleId },
+      update: {},
+    });
+
+    await this.auditService.recordLog({
+      tenantId,
+      userId: actorUserId,
+      resource: PermissionResource.USERS,
+      action: PermissionAction.UPDATE,
+      entityId: dto.userId,
+      metadata: { assignedRoleId: dto.roleId },
+    });
+
+    return assignment;
+  }
+
+  async removeRoleFromUser(tenantId: string, dto: AssignRoleDto, actorUserId?: string) {
+    const assignment = await this.prisma.userRole.findFirst({
+      where: { userId: dto.userId, roleId: dto.roleId },
+      include: { role: true, user: true },
+    });
+
+    if (!assignment || assignment.user?.tenantId !== tenantId || assignment.role?.tenantId !== tenantId) {
+      throw new NotFoundException('Role assignment not found for tenant');
+    }
+
+    await this.prisma.userRole.delete({ where: { id: assignment.id } });
+
+    await this.auditService.recordLog({
+      tenantId,
+      userId: actorUserId,
+      resource: PermissionResource.USERS,
+      action: PermissionAction.UPDATE,
+      entityId: dto.userId,
+      metadata: { removedRoleId: dto.roleId },
+    });
+
+    return { message: 'Role removed from user' };
+  }
+
+  async getUserPermissions(tenantId: string, userId: string) {
+    const assignments = await this.prisma.userRole.findMany({
+      where: { userId },
+      include: { role: { include: { permissions: true } } },
+    });
+
+    const scopedAssignments = assignments.filter((assignment) => assignment.role?.tenantId === tenantId);
+
+    const permissionsMap = new Map<string, { resource: PermissionResource; action: PermissionAction }>();
+
+    for (const assignment of scopedAssignments) {
+      for (const permission of assignment.role.permissions) {
+        const key = `${permission.resource}_${permission.action}`;
+        permissionsMap.set(key, { resource: permission.resource, action: permission.action });
+      }
+    }
+
+    return Array.from(permissionsMap.values());
+  }
+
+  async listRoles(tenantId: string) {
+    return this.prisma.role.findMany({ where: { tenantId }, include: { permissions: true } });
+  }
+
+  async getRole(tenantId: string, id: string) {
+    const role = await this.prisma.role.findFirst({ where: { id, tenantId }, include: { permissions: true } });
+    if (!role) {
+      throw new NotFoundException('Role not found');
+    }
+    return role;
+  }
+}

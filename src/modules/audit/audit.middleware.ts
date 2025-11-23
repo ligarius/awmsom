@@ -7,11 +7,15 @@ export class AuditMiddleware implements NestMiddleware {
   constructor(private readonly auditService: AuditService) {}
 
   use(req: Request, _res: Response, next: NextFunction) {
+    (req as any).auditMeta = {
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    };
+
     this.auditService.recordEvent({
-      timestamp: new Date().toISOString(),
       method: req.method,
       path: req.originalUrl,
-      details: { headers: req.headers },
+      timestamp: new Date().toISOString(),
     });
 
     next();
