@@ -29,11 +29,13 @@ Esta tabla resume el estado de los sprints del WMS, los objetivos principales y 
    - Motor de slotting y sugerencias de reubicación con validaciones de capacidad y reglas por velocidad/zona.
    - Balanceo inter-warehouse para distribuir carga y evitar saturación de inventario.
    - KPIs de capacidad y productividad para monitorear eficiencia operativa.
+7. **Sprint 7 – Seguridad y compliance** (Completado)
+   - MFA y OAuth2 habilitados para usuarios internos y externos, con validaciones centralizadas de sesión y dispositivo.
+   - Políticas de retención de datos aplicadas junto con cifrado en tránsito y en reposo para catálogos maestros y registros operativos.
+   - Proceso recurrente de revisión de permisos con trazabilidad detallada de cambios en roles y accesos sensibles.
 
 ## Sprints en progreso
 - Ninguno; el alcance comprometido está integrado en la rama principal.
 
 ## Sprints pendientes
-- **Sprint 7 – Seguridad y compliance**
-  - MFA/OAuth2 para usuarios internos y externos, políticas de retención de datos y cifrado en tránsito/en reposo.
-  - Revisiones periódicas de permisos y trazabilidad completa de cambios maestros.
+ - Ninguno; el backlog relevante está priorizado y planificado.
