@@ -44,6 +44,58 @@ export class AuthService {
     return crypto.randomInt(100000, 999999).toString();
   }
 
+  private generateTotpCode(secret: string, timestamp = Date.now()) {
+    const timeStep = Math.floor(timestamp / 30000);
+    const buffer = Buffer.alloc(8);
+    buffer.writeBigUInt64BE(BigInt(timeStep));
+
+    const digest = crypto.createHmac('sha1', secret).update(buffer).digest();
+    const offset = digest[digest.length - 1] & 0xf;
+    const binary =
+      ((digest[offset] & 0x7f) << 24) |
+      ((digest[offset + 1] & 0xff) << 16) |
+      ((digest[offset + 2] & 0xff) << 8) |
+      (digest[offset + 3] & 0xff);
+
+    const code = (binary % 1000000).toString().padStart(6, '0');
+    return code;
+  }
+
+  private validateMfaCode(code: string, factor: any) {
+    if (!factor?.secret) {
+      throw new UnauthorizedException('MFA secret not configured');
+    }
+
+    if (factor.type === 'totp') {
+      const window = 1;
+      for (let i = -window; i <= window; i++) {
+        const timestamp = Date.now() + i * 30000;
+        if (this.generateTotpCode(factor.secret, timestamp) === code) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    return code === factor.secret;
+  }
+
+  private deliverMfaCode(factor: any, code: string) {
+    const destination = factor.destination ?? factor.label ?? factor.type;
+    const transport = factor.type?.toLowerCase();
+
+    if (transport === 'sms' || transport === 'email') {
+      console.info(`Sending ${transport.toUpperCase()} MFA code to ${destination}`);
+    } else if (transport === 'totp') {
+      console.info(`Generate TOTP code for ${destination}`);
+    } else {
+      console.info(`Delivering MFA code via ${transport ?? 'unknown'} to ${destination}`);
+    }
+
+    // In a real implementation, integrate with email/SMS/TOTP delivery providers here.
+    return code;
+  }
+
   private async issueToken(user: any) {
     const prisma = this.prisma as any;
     const userRoles = prisma.userRole?.findMany
@@ -64,8 +116,8 @@ export class AuthService {
 
   private async upsertChallenge(user: any, factor: any) {
     const prisma = this.prisma as any;
-    const code = this.generateMfaCode();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    const code = factor.type === 'totp' ? this.generateTotpCode(factor.secret) : factor.secret;
 
     const challenge = await prisma.mfaChallenge.create({
       data: {
@@ -78,7 +130,9 @@ export class AuthService {
       },
     });
 
-    return { challenge, code };
+    this.deliverMfaCode(factor, code);
+
+    return { challenge };
   }
 
   health() {
@@ -116,13 +170,12 @@ export class AuthService {
       }
 
       const factor = dto.factorId ? factors.find((f: any) => f.id === dto.factorId) ?? factors[0] : factors[0];
-      const { challenge, code } = await this.upsertChallenge(user, factor);
+      const { challenge } = await this.upsertChallenge(user, factor);
 
       return {
         mfaRequired: true,
         challengeId: challenge.id,
         factor: { id: factor.id, type: factor.type, channelHint: challenge.channelHint },
-        code,
       };
     }
 
@@ -183,7 +236,13 @@ export class AuthService {
       throw new UnauthorizedException('Challenge expired');
     }
 
-    if (challenge.code !== dto.code) {
+    const factor = await prisma.mfaFactor.findUnique({ where: { id: challenge.factorId } });
+    if (!factor || factor.userId !== challenge.userId) {
+      throw new UnauthorizedException('Invalid MFA factor');
+    }
+
+    const isValid = this.validateMfaCode(dto.code, factor);
+    if (!isValid) {
       throw new UnauthorizedException('Invalid MFA code');
     }
 
