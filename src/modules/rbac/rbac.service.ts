@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { PermissionAction, PermissionResource } from '@prisma/client';
+import { AccessReviewStatus, PermissionAction, PermissionResource, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateRoleDto } from './dto/create-role.dto';
@@ -10,6 +10,10 @@ import { SetRolePermissionsDto } from './dto/set-role-permissions.dto';
 @Injectable()
 export class RbacService {
   constructor(private readonly prisma: PrismaService, private readonly auditService: AuditService) {}
+
+  private readonly excessivePermissionThreshold = Number(
+    process.env.RBAC_EXCESSIVE_PERMISSION_THRESHOLD ?? 20,
+  );
 
   async createRole(tenantId: string, dto: CreateRoleDto, actorUserId?: string) {
     const role = await this.prisma.role.create({
@@ -195,5 +199,192 @@ export class RbacService {
       throw new NotFoundException('Role not found');
     }
     return role;
+  }
+
+  async generateAccessReview(
+    tenantId: string,
+    options: {
+      periodStart?: Date;
+      periodEnd?: Date;
+      responsibleUserId?: string;
+      summary?: string;
+      evidenceUrl?: string;
+      actorUserId?: string;
+    } = {},
+  ) {
+    const periodEnd = options.periodEnd ?? new Date();
+    const periodStart = options.periodStart ?? new Date(periodEnd.getTime() - 1000 * 60 * 60 * 24 * 30);
+
+    const roles = await this.prisma.role.findMany({
+      where: { tenantId },
+      include: {
+        permissions: true,
+        users: { include: { user: true } },
+      },
+    });
+
+    const orphanedPermissions = roles
+      .filter((role) => role.permissions.length > 0 && role.users.length === 0)
+      .map((role) => ({
+        roleId: role.id,
+        name: role.name,
+        permissions: role.permissions.map((permission) => ({
+          resource: permission.resource,
+          action: permission.action,
+        })),
+      }));
+
+    const userPermissions = new Map<
+      string,
+      { userId: string; email?: string | null; displayName?: string | null; permissions: Set<string>; risky: number; roles: string[] }
+    >();
+
+    for (const role of roles) {
+      const riskyActions = new Set<PermissionAction>([
+        PermissionAction.CONFIG,
+        PermissionAction.APPROVE,
+        PermissionAction.DELETE,
+      ]);
+      for (const assignment of role.users) {
+        const key = assignment.userId;
+        if (!userPermissions.has(key)) {
+          userPermissions.set(key, {
+            userId: assignment.userId,
+            email: assignment.user?.email,
+            displayName: (assignment.user as any)?.displayName,
+            permissions: new Set<string>(),
+            risky: 0,
+            roles: [],
+          });
+        }
+        const snapshot = userPermissions.get(key)!;
+        snapshot.roles.push(role.name);
+        for (const permission of role.permissions) {
+          const token = `${permission.resource}:${permission.action}`;
+          snapshot.permissions.add(token);
+          if (riskyActions.has(permission.action)) {
+            snapshot.risky += 1;
+          }
+        }
+      }
+    }
+
+    const excessiveAssignments = Array.from(userPermissions.values())
+      .filter((record) => record.permissions.size > this.excessivePermissionThreshold || record.risky > 3)
+      .map((record) => ({
+        userId: record.userId,
+        email: record.email,
+        displayName: record.displayName,
+        totalPermissions: record.permissions.size,
+        riskyPermissions: record.risky,
+        roles: record.roles,
+      }));
+
+    const review = await this.prisma.accessReview.create({
+      data: {
+        tenantId,
+        periodStart,
+        periodEnd,
+        summary: options.summary,
+        findings: {
+          rolesAnalyzed: roles.length,
+          assignmentsReviewed: userPermissions.size,
+          generatedAt: new Date().toISOString(),
+        } as Prisma.JsonValue,
+        orphaned: orphanedPermissions as Prisma.JsonValue,
+        excessive: excessiveAssignments as Prisma.JsonValue,
+        responsibleUserId: options.responsibleUserId,
+        evidenceUrl: options.evidenceUrl,
+      },
+    });
+
+    await this.auditService.recordLog({
+      tenantId,
+      userId: options.actorUserId,
+      resource: PermissionResource.ROLES,
+      action: PermissionAction.CONFIG,
+      entityId: review.id,
+      metadata: {
+        type: 'access-review-generated',
+        orphanedCount: orphanedPermissions.length,
+        excessiveAssignments: excessiveAssignments.length,
+      },
+    });
+
+    return review;
+  }
+
+  async listAccessReviews(tenantId: string) {
+    return this.prisma.accessReview.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+  }
+
+  async getAccessReview(tenantId: string, id: string) {
+    const review = await this.prisma.accessReview.findFirst({ where: { id, tenantId } });
+    if (!review) {
+      throw new NotFoundException('Access review not found');
+    }
+    return review;
+  }
+
+  async updateAccessReviewStatus(
+    tenantId: string,
+    id: string,
+    status: AccessReviewStatus,
+    actorUserId?: string,
+    evidenceUrl?: string,
+    summary?: string,
+  ) {
+    const review = await this.getAccessReview(tenantId, id);
+    const updated = await this.prisma.accessReview.update({
+      where: { id },
+      data: {
+        status,
+        reviewerUserId: actorUserId,
+        evidenceUrl: evidenceUrl ?? review.evidenceUrl,
+        summary: summary ?? review.summary,
+        reviewedAt: new Date(),
+      },
+    });
+
+    await this.auditService.recordLog({
+      tenantId,
+      userId: actorUserId,
+      resource: PermissionResource.ROLES,
+      action: status === AccessReviewStatus.APPROVED ? PermissionAction.APPROVE : PermissionAction.DELETE,
+      entityId: id,
+      metadata: {
+        type: 'access-review-decision',
+        status,
+        evidenceUrl: updated.evidenceUrl,
+      },
+    });
+
+    return updated;
+  }
+
+  async exportAccessReview(tenantId: string, id: string) {
+    const review = await this.getAccessReview(tenantId, id);
+
+    return {
+      id: review.id,
+      tenantId: review.tenantId,
+      periodStart: review.periodStart,
+      periodEnd: review.periodEnd,
+      status: review.status,
+      summary: review.summary,
+      evidenceUrl: review.evidenceUrl,
+      orphaned: review.orphaned,
+      excessive: review.excessive,
+      findings: review.findings,
+      reviewedAt: review.reviewedAt,
+      responsibleUserId: review.responsibleUserId,
+      reviewerUserId: review.reviewerUserId,
+      createdAt: review.createdAt,
+      updatedAt: review.updatedAt,
+    };
   }
 }
