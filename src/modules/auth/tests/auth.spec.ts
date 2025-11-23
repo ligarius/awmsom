@@ -1,4 +1,5 @@
 import { AuthService } from '../auth.service';
+import { UserAccountService } from '../../users/user-account.service';
 import * as jwt from 'jsonwebtoken';
 
 class MockPrismaService {
@@ -61,10 +62,12 @@ class MockPrismaService {
 describe('Auth module', () => {
   let prisma: MockPrismaService;
   let authService: AuthService;
+  let userAccountService: UserAccountService;
 
   beforeEach(() => {
     prisma = new MockPrismaService();
-    authService = new AuthService(prisma as any);
+    userAccountService = new UserAccountService(prisma as any);
+    authService = new AuthService(prisma as any, undefined as any, userAccountService as any);
   });
 
   it('registers users with hashed passwords and prevents duplicates per tenant', async () => {
@@ -82,6 +85,18 @@ describe('Auth module', () => {
     await expect(
       authService.register({ email: 'user@example.com', password: 'supersecret', tenantId: tenant.id }),
     ).rejects.toThrow('User already exists');
+  });
+
+  it('rejects registrations without a usable password', async () => {
+    const tenant = prisma.tenant.create({ data: { name: 'Tenant', code: 'T11', plan: 'pro' } });
+
+    await expect(
+      authService.register({ email: 'nopass@example.com', password: '', tenantId: tenant.id }),
+    ).rejects.toThrow('Password is required');
+
+    await expect(
+      authService.register({ email: 'spaces@example.com', password: '   ', tenantId: tenant.id }),
+    ).rejects.toThrow('Password is required');
   });
 
   it('embeds tenantId in signed JWT payload during login', async () => {
