@@ -105,6 +105,20 @@ export class AuthService {
     return this.sanitizeUser(user);
   }
 
+  async listUsers(tenantId: string) {
+    const prisma = this.prisma as any;
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found');
+    }
+    if (!tenant.isActive) {
+      throw new UnauthorizedException('Tenant inactive');
+    }
+
+    const users = await prisma.user.findMany({ where: { tenantId } });
+    return users.map((user: any) => this.sanitizeUser(user));
+  }
+
   async findUser(tenantId: string, email: string) {
     const prisma = this.prisma as any;
     const user = await prisma.user.findFirst({ where: { tenantId, email } });
@@ -133,5 +147,49 @@ export class AuthService {
 
     const updated = await prisma.user.update({ where: { id }, data });
     return this.sanitizeUser(updated);
+  }
+
+  async deactivateUser(id: string) {
+    const prisma = this.prisma as any;
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const tenant = await prisma.tenant.findUnique({ where: { id: user.tenantId } });
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found');
+    }
+    if (!tenant.isActive) {
+      throw new UnauthorizedException('Tenant inactive');
+    }
+    if (!user.isActive) {
+      throw new ConflictException('User already inactive');
+    }
+
+    const updated = await prisma.user.update({ where: { id }, data: { isActive: false } });
+    return this.sanitizeUser(updated);
+  }
+
+  async deleteUser(id: string) {
+    const prisma = this.prisma as any;
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const tenant = await prisma.tenant.findUnique({ where: { id: user.tenantId } });
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found');
+    }
+    if (!tenant.isActive) {
+      throw new UnauthorizedException('Tenant inactive');
+    }
+    if (!user.isActive) {
+      throw new ConflictException('User inactive');
+    }
+
+    const deleted = await prisma.user.delete({ where: { id } });
+    return this.sanitizeUser(deleted);
   }
 }
