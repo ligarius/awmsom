@@ -6,9 +6,19 @@ import { CreateUserDto } from './dto/create-user.dto';
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async createUser(dto: CreateUserDto) {
+  async createUser(tenantIdOrDto: string | CreateUserDto, dtoMaybe?: CreateUserDto) {
+    const dto = (typeof tenantIdOrDto === 'string' ? dtoMaybe : tenantIdOrDto) as CreateUserDto | undefined;
+    const tenantId = typeof tenantIdOrDto === 'string' ? tenantIdOrDto : tenantIdOrDto?.tenantId;
+
+    if (!dto) {
+      throw new BadRequestException('User payload is required');
+    }
+    if (!tenantId) {
+      throw new BadRequestException('Tenant is required');
+    }
+
     const prisma = this.prisma as any;
-    const tenant = await prisma.tenant.findUnique({ where: { id: dto.tenantId } });
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) {
       throw new BadRequestException('Tenant not found');
     }
@@ -16,7 +26,7 @@ export class UsersService {
       throw new BadRequestException('Tenant is inactive');
     }
 
-    const existing = await prisma.user.findFirst({ where: { tenantId: dto.tenantId, email: dto.email } });
+    const existing = await prisma.user.findFirst({ where: { tenantId, email: dto.email } });
     if (existing) {
       throw new BadRequestException('User already exists');
     }
@@ -25,8 +35,7 @@ export class UsersService {
       data: {
         email: dto.email,
         passwordHash: dto.password,
-        tenantId: dto.tenantId,
-        roleId: dto.roleId,
+        tenantId,
         isActive: dto.isActive ?? true,
       },
     });
