@@ -1,12 +1,14 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/common';
 import { Request } from 'express';
-import { PermissionAction, PermissionResource } from '@prisma/client';
+import { AccessReviewStatus, PermissionAction, PermissionResource } from '@prisma/client';
 import { TenantContextService } from '../../common/tenant-context.service';
 import { Permissions } from '../../decorators/permissions.decorator';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { SetRolePermissionsDto } from './dto/set-role-permissions.dto';
+import { TriggerAccessReviewDto } from './dto/trigger-access-review.dto';
+import { UpdateAccessReviewStatusDto } from './dto/update-access-review-status.dto';
 import { RbacService } from './rbac.service';
 
 @Controller('rbac')
@@ -83,5 +85,49 @@ export class RbacController {
       return [];
     }
     return this.rbacService.getUserPermissions(tenantId, userId);
+  }
+
+  @Post('reviews/run')
+  @Permissions(PermissionResource.REPORTS, PermissionAction.CREATE)
+  triggerReview(@Body() dto: TriggerAccessReviewDto, @Req() req: Request) {
+    const tenantId = this.tenantContext.getTenantId();
+    const userId = (req as any)?.user?.sub;
+    return this.rbacService.generateAccessReview(tenantId, {
+      periodStart: dto.periodStart ? new Date(dto.periodStart) : undefined,
+      periodEnd: dto.periodEnd ? new Date(dto.periodEnd) : undefined,
+      responsibleUserId: dto.responsibleUserId,
+      summary: dto.summary,
+      evidenceUrl: dto.evidenceUrl,
+      actorUserId: userId,
+    });
+  }
+
+  @Get('reviews')
+  @Permissions(PermissionResource.REPORTS, PermissionAction.READ)
+  listReviews() {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.rbacService.listAccessReviews(tenantId);
+  }
+
+  @Get('reviews/:id/export')
+  @Permissions(PermissionResource.REPORTS, PermissionAction.READ)
+  exportReview(@Param('id') id: string) {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.rbacService.exportAccessReview(tenantId, id);
+  }
+
+  @Patch('reviews/:id/status')
+  @Permissions(PermissionResource.REPORTS, PermissionAction.APPROVE)
+  updateReviewStatus(@Param('id') id: string, @Body() dto: UpdateAccessReviewStatusDto, @Req() req: Request) {
+    const tenantId = this.tenantContext.getTenantId();
+    const userId = (req as any)?.user?.sub;
+    return this.rbacService.updateAccessReviewStatus(
+      tenantId,
+      id,
+      dto.status ?? AccessReviewStatus.PENDING,
+      userId,
+      dto.evidenceUrl,
+      dto.summary,
+    );
   }
 }
