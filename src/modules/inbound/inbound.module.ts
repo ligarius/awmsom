@@ -4,10 +4,11 @@ import { InventoryModule } from '../inventory/inventory.module';
 import { ConfigModule } from '../config/config.module';
 import { InboundService } from './inbound.service';
 import { InboundController } from './inbound.controller';
+import { PaginationService } from '../../common/pagination/pagination.service';
 
 @Module({
   imports: [PrismaModule, InventoryModule, ConfigModule],
   controllers: [InboundController],
-  providers: [InboundService],
+  providers: [InboundService, PaginationService],
 })
 export class InboundModule {}

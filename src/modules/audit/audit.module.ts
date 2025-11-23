@@ -6,11 +6,12 @@ import { AuditController } from './audit.controller';
 import { AuditInterceptor } from './audit.interceptor';
 import { AuditMiddleware } from './audit.middleware';
 import { AuditService } from './audit.service';
+import { PaginationService } from '../../common/pagination/pagination.service';
 
 @Module({
   imports: [PrismaModule],
   controllers: [AuditController],
-  providers: [AuditService, TenantContextService, { provide: APP_INTERCEPTOR, useClass: AuditInterceptor }],
+  providers: [AuditService, TenantContextService, PaginationService, { provide: APP_INTERCEPTOR, useClass: AuditInterceptor }],
   exports: [AuditService],
 })
 export class AuditModule implements NestModule {

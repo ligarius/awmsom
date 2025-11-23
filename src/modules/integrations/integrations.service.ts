@@ -2,12 +2,19 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { IntegrationJobStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { QueuesService } from '../../infrastructure/queues/queues.service';
+import { PaginationService } from '../../common/pagination/pagination.service';
 import { CreateIntegrationConfigDto } from './dto/create-integration-config.dto';
 import { UpdateIntegrationConfigDto } from './dto/update-integration-config.dto';
 
 @Injectable()
 export class IntegrationsService {
-  constructor(private readonly prisma: PrismaService, private readonly audit: AuditService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+    private readonly queues: QueuesService,
+    private readonly pagination: PaginationService,
+  ) {}
 
   createIntegrationConfig(tenantId: string, dto: CreateIntegrationConfigDto) {
     return this.prisma.integrationConfig.create({
@@ -32,6 +39,16 @@ export class IntegrationsService {
     return this.prisma.integrationConfig.findMany({ where: { tenantId, type } });
   }
 
+  listIntegrationJobs(tenantId: string, page = 1, limit = 50) {
+    const { skip, take } = this.pagination.buildPaginationParams(page, limit);
+    return this.prisma.integrationJob.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take,
+    });
+  }
+
   async getIntegration(tenantId: string, id: string) {
     const integration = await this.prisma.integrationConfig.findFirst({ where: { id, tenantId } });
     if (!integration) {
@@ -41,9 +58,14 @@ export class IntegrationsService {
   }
 
   queueJob(tenantId: string, integrationId: string | null, jobType: string, payload: any) {
-    return this.prisma.integrationJob.create({
-      data: { tenantId, integrationId, jobType, payload, status: IntegrationJobStatus.PENDING },
-    });
+    return this.prisma.integrationJob
+      .create({
+        data: { tenantId, integrationId, jobType, payload, status: IntegrationJobStatus.PENDING },
+      })
+      .then((job) => {
+        this.queues.enqueueIntegrationJob(tenantId, job.id);
+        return job;
+      });
   }
 
   async processJob(jobId: string) {

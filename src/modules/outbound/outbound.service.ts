@@ -25,6 +25,7 @@ import { AssignHandlingUnitsToShipmentDto } from './dto/assign-handling-units-to
 import { DispatchShipmentDto } from './dto/dispatch-shipment.dto';
 import { GetShipmentsFilterDto } from './dto/get-shipments-filter.dto';
 import { InventoryOptimizationService } from '../inventory/inventory-optimization.service';
+import { PaginationService } from '../../common/pagination/pagination.service';
 
 @Injectable()
 export class OutboundService {
@@ -33,6 +34,7 @@ export class OutboundService {
     private readonly tenantContext: TenantContextService,
     private readonly configService: ConfigService,
     private readonly inventoryOptimizationService: InventoryOptimizationService,
+    private readonly pagination: PaginationService,
   ) {}
 
   async createOutboundOrder(dto: CreateOutboundOrderDto) {
@@ -81,6 +83,8 @@ export class OutboundService {
     const tenantId = this.tenantContext.getTenantId();
     const where: Prisma.OutboundOrderWhereInput = { tenantId } as any;
 
+    const { skip, take } = this.pagination.buildPaginationParams(filters.page, filters.limit);
+
     if (filters.warehouseId) {
       where.warehouseId = filters.warehouseId;
     }
@@ -111,6 +115,8 @@ export class OutboundService {
       where,
       include: { lines: true },
       orderBy: { createdAt: 'desc' },
+      skip,
+      take,
     });
   }
 

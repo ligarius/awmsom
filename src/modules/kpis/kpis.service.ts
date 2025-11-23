@@ -2,10 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { OutboundOrderStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { KpiQueryDto } from './dto/kpi-query.dto';
+import { CacheService } from '../../common/cache/cache.service';
+
+const KPIS_CACHE_TTL = parseInt(process.env.KPIS_CACHE_TTL ?? '300', 10);
 
 @Injectable()
 export class KpisService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly cache: CacheService) {}
 
   private buildShiftWindow(dto: KpiQueryDto) {
     if (!dto.shiftStart || !dto.shiftEnd) {
@@ -39,6 +42,21 @@ export class KpisService {
   }
 
   async getSummary(tenantId: string, dto: KpiQueryDto) {
+    const cacheKey = this.cache.buildKey('kpis:summary', [
+      tenantId,
+      dto.fromDate,
+      dto.toDate,
+      dto.warehouseId,
+      dto.customerId,
+      dto.productId,
+      dto.zone,
+      dto.operatorId,
+    ]);
+    const cached = await this.cache.getJson<any>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const dateRange = this.buildDateRange(dto);
     const shiftWindow = this.buildShiftWindow(dto);
 
@@ -51,17 +69,17 @@ export class KpisService {
       status: { in: [OutboundOrderStatus.PICKED, OutboundOrderStatus.PARTIALLY_PICKED, OutboundOrderStatus.FULLY_ALLOCATED] },
     } as Prisma.OutboundOrderWhereInput;
 
-    const outboundLines = await this.prisma.outboundOrderLine.findMany({
+    const outboundLinesAgg = await this.prisma.outboundOrderLine.aggregate({
       where: {
         tenantId,
         productId: dto.productId ? dto.productId : undefined,
         outboundOrder: outboundFilter,
       },
-      include: { outboundOrder: true },
+      _sum: { requestedQty: true, pickedQty: true },
     });
 
-    const requestedTotal = outboundLines.reduce((acc, line) => acc + Number(line.requestedQty), 0);
-    const pickedTotal = outboundLines.reduce((acc, line) => acc + Number(line.pickedQty), 0);
+    const requestedTotal = Number(outboundLinesAgg._sum.requestedQty ?? 0);
+    const pickedTotal = Number(outboundLinesAgg._sum.pickedQty ?? 0);
     const fillRate = requestedTotal > 0 ? pickedTotal / requestedTotal : 0;
 
     const shipments = await this.prisma.shipment.findMany({
@@ -96,14 +114,15 @@ export class KpisService {
       });
     });
 
-    const inventory = await this.prisma.inventory.findMany({
+    const inventoryTotals = await this.prisma.inventory.aggregate({
       where: {
         tenantId,
         ...(dto.warehouseId ? { location: { warehouseId: dto.warehouseId } } : {}),
         ...(dto.productId ? { productId: dto.productId } : {}),
       },
+      _sum: { quantity: true },
     });
-    const totalInventoryQty = inventory.reduce((acc, inv) => acc + Number(inv.quantity), 0);
+    const totalInventoryQty = Number(inventoryTotals._sum.quantity ?? 0);
     const averageInventoryQty = totalInventoryQty / 2 || 0;
     const inventoryTurnover = averageInventoryQty > 0 ? pickedTotal / averageInventoryQty : 0;
 
@@ -206,7 +225,7 @@ export class KpisService {
       return acc;
     }, {} as Record<string, { warehouseId: string; shipments: number; orders: number; lines: number; units: number }>);
 
-    return {
+    const result = {
       period: { from: new Date(dto.fromDate), to: new Date(dto.toDate) },
       scope: {
         warehouseId: dto.warehouseId,
@@ -254,5 +273,7 @@ export class KpisService {
         throughputByWarehouse: Object.values(throughputByWarehouse),
       },
     };
+    await this.cache.setJson(cacheKey, result, KPIS_CACHE_TTL);
+    return result;
   }
 }

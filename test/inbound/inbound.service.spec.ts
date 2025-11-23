@@ -9,6 +9,7 @@ import {
 import { InboundService } from '../../src/modules/inbound/inbound.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { InventoryService } from '../../src/modules/inventory/inventory.service';
+import { PaginationService } from '../../src/common/pagination/pagination.service';
 
 const decimal = (value: number) => new Prisma.Decimal(value);
 
@@ -18,6 +19,7 @@ describe('InboundService', () => {
   let inventoryService: jest.Mocked<InventoryService>;
   let service: InboundService;
   let tenantContext: { getTenantId: jest.Mock };
+  const pagination = new PaginationService();
 
   beforeEach(() => {
     tx = {
@@ -57,7 +59,7 @@ describe('InboundService', () => {
       resolveInventoryPolicy: jest.fn().mockResolvedValue(null),
     };
 
-    service = new InboundService(prisma, inventoryService, tenantContext as any, configService as any);
+    service = new InboundService(prisma, inventoryService, tenantContext as any, configService as any, pagination);
   });
 
   it('creates a receipt in DRAFT status', async () => {
