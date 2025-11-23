@@ -76,6 +76,7 @@ class MockPrismaService {
 
   mfaFactor = {
     findMany: ({ where }: any) => this.mfaFactors.filter((f) => f.userId === where.userId && f.enabled === true),
+    findUnique: ({ where }: any) => this.mfaFactors.find((f) => f.id === where.id) ?? null,
     create: ({ data }: any) => {
       const record = { id: this.nextId(), createdAt: new Date(), updatedAt: new Date(), ...data };
       this.mfaFactors.push(record);
@@ -177,8 +178,11 @@ describe('Auth module', () => {
     })) as any;
     expect(firstStep.mfaRequired).toBe(true);
     expect(firstStep.factor.id).toBe(factor.id);
+    expect(firstStep.code).toBeUndefined();
 
-    const verified = await authService.verifyMfa({ challengeId: firstStep.challengeId, code: firstStep.code } as any);
+    const totpCode = (authService as any).generateTotpCode(factor.secret);
+
+    const verified = await authService.verifyMfa({ challengeId: firstStep.challengeId, code: totpCode } as any);
     expect(verified.access_token).toBeDefined();
   });
 
