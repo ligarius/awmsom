@@ -25,16 +25,15 @@ Esta tabla resume el estado de los sprints del WMS, los objetivos principales y 
    - Empaquetado posterior al picking mediante unidades de manejo (handling units) asociadas a líneas de órdenes.
    - Planeación y carga de embarques con unidades asignadas por almacén y despacho que registra movimientos `OUTBOUND_SHIPMENT`.
    - Validaciones de alineación de bodega/orden y límites de cantidad empacada respecto a lo pickeado.
+6. **Sprint 6 – Optimización operativa** (Completado)
+   - Motor de slotting y sugerencias de reubicación con validaciones de capacidad y reglas por velocidad/zona.
+   - Balanceo inter-warehouse para distribuir carga y evitar saturación de inventario.
+   - KPIs de capacidad y productividad para monitorear eficiencia operativa.
 
 ## Sprints en progreso
 - Ninguno; el alcance comprometido está integrado en la rama principal.
 
 ## Sprints pendientes
-- **Sprint 6 – Optimización operativa**
-  - Reglas avanzadas de slotting, sugerencias de reubicación y balanceo de carga entre almacenes.
-  - Reportes de productividad y análisis de capacidad.
-  - Los modelos deben generar reglas por velocidad de producto, zonas de picking/reserva y validar capacidad antes de sugerir traslados.
-  - Los controladores de inventario/outbound deben publicar endpoints para consumir reglas de slotting, reubicación y balanceo inter-warehouse con pruebas asociadas.
 - **Sprint 7 – Seguridad y compliance**
   - MFA/OAuth2 para usuarios internos y externos, políticas de retención de datos y cifrado en tránsito/en reposo.
   - Revisiones periódicas de permisos y trazabilidad completa de cambios maestros.
