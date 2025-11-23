@@ -94,6 +94,20 @@ enum PermissionAction {
   CONFIG
 }
 
+enum IntegrationType {
+  ERP
+  ECOMMERCE
+  TMS
+  OTHER
+}
+
+enum IntegrationJobStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
 enum ShipmentStatus {
   PLANNED
   LOADING
@@ -175,6 +189,10 @@ model Tenant {
   outboundRules         OutboundRule[]
   roles                 Role[]
   auditLogs             AuditLog[]
+  apiKeys              ApiKey[]
+  integrationConfigs   IntegrationConfig[]
+  webhookSubscriptions WebhookSubscription[]
+  integrationJobs      IntegrationJob[]
 }
 
 model User {
@@ -850,4 +868,80 @@ model OutboundRule {
 
   @@index([tenantId])
   @@index([tenantId, warehouseId])
+}
+
+model ApiKey {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+
+  name      String
+  key       String
+  isActive  Boolean  @default(true)
+  canRead   Boolean  @default(true)
+  canWrite  Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+
+  @@index([tenantId])
+  @@unique([key])
+}
+
+model IntegrationConfig {
+  id        String          @id @default(uuid())
+  tenantId  String
+  tenant    Tenant          @relation(fields: [tenantId], references: [id])
+
+  type      IntegrationType
+  name      String
+  baseUrl   String?
+  apiKey    String?
+  username  String?
+  password  String?
+  extraConfig Json?
+
+  isActive  Boolean         @default(true)
+
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, type])
+}
+
+model WebhookSubscription {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+
+  eventType String
+  targetUrl String
+  secret    String?
+  isActive  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, eventType])
+}
+
+model IntegrationJob {
+  id            String               @id @default(uuid())
+  tenantId      String
+  tenant        Tenant               @relation(fields: [tenantId], references: [id])
+
+  integrationId String?
+  integration   IntegrationConfig?   @relation(fields: [integrationId], references: [id])
+
+  jobType       String
+  payload       Json
+  status        IntegrationJobStatus @default(PENDING)
+  lastError     String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, status])
 }
