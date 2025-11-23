@@ -69,6 +69,7 @@ describe('OutboundService with outbound rules', () => {
       getOutboundRule: jest.fn().mockResolvedValue({ enforceFullAllocation: true }),
       getPickingMethods: jest.fn().mockResolvedValue([]),
     } as any;
+    const optimizationService = { planWarehouseBalance: jest.fn() } as any;
 
     const order = {
       id: 'order-1',
@@ -102,7 +103,7 @@ describe('OutboundService with outbound rules', () => {
       location: { warehouseId: 'wh-1' },
     });
 
-    service = new OutboundService(prisma as any, tenantContext, configService);
+    service = new OutboundService(prisma as any, tenantContext, configService, optimizationService);
   });
 
   it('throws when full allocation is required but not possible', async () => {

@@ -33,6 +33,8 @@ Esta tabla resume el estado de los sprints del WMS, los objetivos principales y 
 - **Sprint 6 – Optimización operativa**
   - Reglas avanzadas de slotting, sugerencias de reubicación y balanceo de carga entre almacenes.
   - Reportes de productividad y análisis de capacidad.
+  - Los modelos deben generar reglas por velocidad de producto, zonas de picking/reserva y validar capacidad antes de sugerir traslados.
+  - Los controladores de inventario/outbound deben publicar endpoints para consumir reglas de slotting, reubicación y balanceo inter-warehouse con pruebas asociadas.
 - **Sprint 7 – Seguridad y compliance**
   - MFA/OAuth2 para usuarios internos y externos, políticas de retención de datos y cifrado en tránsito/en reposo.
   - Revisiones periódicas de permisos y trazabilidad completa de cambios maestros.

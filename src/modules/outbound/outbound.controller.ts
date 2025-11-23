@@ -124,6 +124,12 @@ export class OutboundController {
     return this.outboundService.createShipment(dto);
   }
 
+  @Post('orders/:id/rebalance')
+  @Permissions(PermissionResource.OUTBOUND, PermissionAction.CONFIG)
+  rebalanceOrder(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.outboundService.recommendWarehouseBalancing(id);
+  }
+
   @Post('shipments/:id/handling-units')
   @Permissions(PermissionResource.SHIPMENT, PermissionAction.UPDATE)
   assignHandlingUnits(
