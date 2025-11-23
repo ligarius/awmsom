@@ -45,11 +45,12 @@ export class AuthService {
   }
 
   private generateTotpCode(secret: string, timestamp = Date.now()) {
+    const decodedSecret = this.fromBase32(secret);
     const timeStep = Math.floor(timestamp / 30000);
     const buffer = Buffer.alloc(8);
     buffer.writeBigUInt64BE(BigInt(timeStep));
 
-    const digest = crypto.createHmac('sha1', secret).update(buffer).digest();
+    const digest = crypto.createHmac('sha1', decodedSecret).update(buffer).digest();
     const offset = digest[digest.length - 1] & 0xf;
     const binary =
       ((digest[offset] & 0x7f) << 24) |
@@ -61,13 +62,124 @@ export class AuthService {
     return code;
   }
 
-  private validateMfaCode(code: string, factor: any, challenge: any) {
-    if (!challenge?.code) {
-      return false;
+  private toBase32(buffer: Buffer) {
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    let bits = 0;
+    let value = 0;
+    let output = '';
+
+    for (const byte of buffer) {
+      value = (value << 8) | byte;
+      bits += 8;
+
+      while (bits >= 5) {
+        output += alphabet[(value >>> (bits - 5)) & 31];
+        bits -= 5;
+      }
     }
 
+    if (bits > 0) {
+      output += alphabet[(value << (5 - bits)) & 31];
+    }
+
+    return output;
+  }
+
+  private fromBase32(secret: string) {
+    const sanitized = secret.replace(/=+$/g, '').toUpperCase();
+    if (!/^[A-Z2-7]+$/.test(sanitized)) {
+      throw new UnauthorizedException('Invalid TOTP secret format');
+    }
+    if (sanitized.length < 32) {
+      throw new UnauthorizedException('TOTP secret too short');
+    }
+
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    let bits = 0;
+    let value = 0;
+    const bytes: number[] = [];
+
+    for (const char of sanitized) {
+      const idx = alphabet.indexOf(char);
+      if (idx === -1) {
+        throw new UnauthorizedException('Invalid TOTP secret format');
+      }
+
+      value = (value << 5) | idx;
+      bits += 5;
+
+      if (bits >= 8) {
+        bytes.push((value >>> (bits - 8)) & 0xff);
+        bits -= 8;
+      }
+    }
+
+    return Buffer.from(bytes);
+  }
+
+  private encryptTotpSecret(secret: string) {
+    const key = crypto
+      .createHash('sha256')
+      .update(process.env.TOTP_ENCRYPTION_KEY ?? 'default_totp_encryption_key')
+      .digest();
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    const encrypted = Buffer.concat([cipher.update(secret, 'utf8'), cipher.final()]);
+    const authTag = cipher.getAuthTag();
+
+    return [iv.toString('base64'), encrypted.toString('base64'), authTag.toString('base64')].join('.');
+  }
+
+  private decryptTotpSecret(secret: string) {
+    const [ivB64, encryptedB64, authTagB64] = secret.split('.');
+    if (!ivB64 || !encryptedB64 || !authTagB64) {
+      throw new UnauthorizedException('MFA secret not configured');
+    }
+
+    const key = crypto
+      .createHash('sha256')
+      .update(process.env.TOTP_ENCRYPTION_KEY ?? 'default_totp_encryption_key')
+      .digest();
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivB64, 'base64'));
+    decipher.setAuthTag(Buffer.from(authTagB64, 'base64'));
+    const decrypted = Buffer.concat([
+      decipher.update(Buffer.from(encryptedB64, 'base64')),
+      decipher.final(),
+    ]);
+
+    return decrypted.toString('utf8');
+  }
+
+  private generateTotpSecret() {
+    const random = crypto.randomBytes(20);
+    return this.toBase32(random);
+  }
+
+  private buildOtpAuthUri(secret: string, user: any, tenant: any, label?: string) {
+    const account = encodeURIComponent(user.email ?? user.id ?? 'user');
+    const issuer = encodeURIComponent(tenant?.name ?? 'awmsom');
+    const accountLabel = encodeURIComponent(label ?? 'totp');
+    return `otpauth://totp/${issuer}:${account}?secret=${secret}&issuer=${issuer}&algorithm=SHA1&digits=6&period=30&label=${accountLabel}`;
+  }
+
+  private validateMfaCode(code: string, factor: any, challenge: any) {
     if (!factor?.secret) {
       throw new UnauthorizedException('MFA secret not configured');
+    }
+
+    if (factor.type === 'totp') {
+      const base32Secret = this.decryptTotpSecret(factor.secret);
+      const expectedCodes = [
+        this.generateTotpCode(base32Secret),
+        this.generateTotpCode(base32Secret, Date.now() - 30000),
+        this.generateTotpCode(base32Secret, Date.now() + 30000),
+      ];
+
+      return expectedCodes.includes(code);
+    }
+
+    if (!challenge?.code) {
+      return false;
     }
 
     return code === challenge.code;
@@ -110,7 +222,10 @@ export class AuthService {
   private async upsertChallenge(user: any, factor: any) {
     const prisma = this.prisma as any;
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-    const code = factor.type === 'totp' ? this.generateTotpCode(factor.secret) : this.generateMfaCode();
+    const code =
+      factor.type === 'totp'
+        ? this.generateTotpCode(this.decryptTotpSecret(factor.secret))
+        : this.generateMfaCode();
 
     const challenge = await prisma.mfaChallenge.create({
       data: {
@@ -199,6 +314,7 @@ export class AuthService {
       throw new UnauthorizedException('Tenant inactive');
     }
 
+    const secret = dto.type === 'totp' ? this.generateTotpSecret() : this.generateMfaCode();
     const factor = await prisma.mfaFactor.create({
       data: {
         userId: user.id,
@@ -207,9 +323,13 @@ export class AuthService {
         label: dto.label ?? dto.type,
         destination: dto.destination,
         enabled: dto.enabled ?? true,
-        secret: this.generateMfaCode(),
+        secret: dto.type === 'totp' ? this.encryptTotpSecret(secret) : secret,
       },
     });
+
+    if (dto.type === 'totp') {
+      return { factorId: factor.id, otpauthUrl: this.buildOtpAuthUri(secret, user, tenant, dto.label) };
+    }
 
     return factor;
   }
