@@ -80,6 +80,14 @@ class MockPrismaService {
       this.locations.push(record);
       return record;
     },
+    findFirst: ({ where }: any) =>
+      this.locations.find(
+        (loc) =>
+          (!where.id || loc.id === where.id) &&
+          (!where.tenantId || loc.tenantId === where.tenantId) &&
+          (!where.warehouseId || loc.warehouseId === where.warehouseId) &&
+          (!where.code || loc.code === where.code),
+      ) ?? null,
     findMany: ({ where }: any) => this.locations.filter((loc) => loc.tenantId === where.tenantId),
   };
 
