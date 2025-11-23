@@ -712,4 +712,9 @@ export class InventoryService {
 
     return StockStatus.AVAILABLE;
   }
+  async listInventorySummary() {
+    const tenantId = this.tenantContext.getTenantId();
+    const prisma = this.prisma as any;
+    return prisma.inventory.findMany({ where: { tenantId } });
+  }
 }
