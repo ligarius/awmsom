@@ -85,6 +85,12 @@ enum PermissionResource {
   ROLES
 }
 
+enum PlanCode {
+  BASIC
+  PRO
+  ENTERPRISE
+}
+
 enum PermissionAction {
   READ
   CREATE
@@ -156,7 +162,15 @@ model Tenant {
   id        String   @id @default(uuid())
   name      String
   code      String   @unique
-  plan      String
+  plan      String   @default("BASIC")
+  planCode  PlanCode?
+  planId    String?
+  subscriptionPlan SubscriptionPlan? @relation(fields: [planId], references: [id])
+  subscriptionStatus String   @default("ACTIVE")
+  trialEndsAt        DateTime?
+  billingEmail       String?
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -193,6 +207,25 @@ model Tenant {
   integrationConfigs   IntegrationConfig[]
   webhookSubscriptions WebhookSubscription[]
   integrationJobs      IntegrationJob[]
+  usageMetrics         UsageMetric[]
+  billingEvents        BillingEvent[]
+}
+
+model SubscriptionPlan {
+  id                  String        @id @default(uuid())
+  code                PlanCode      @unique
+  name                String
+  description         String?
+  maxWarehouses       Int?
+  maxUsers            Int?
+  maxApiKeys          Int?
+  maxMonthlyOrders    Int?
+  maxMonthlyShipments Int?
+  maxIntegrations     Int?
+  isActive            Boolean       @default(true)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  tenants             Tenant[]
 }
 
 model User {
@@ -905,6 +938,7 @@ model IntegrationConfig {
 
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
+  jobs      IntegrationJob[]
 
   @@index([tenantId])
   @@index([tenantId, type])
@@ -944,4 +978,35 @@ model IntegrationJob {
 
   @@index([tenantId])
   @@index([tenantId, status])
+}
+
+model UsageMetric {
+  id                    String   @id @default(uuid())
+  tenantId              String
+  tenant                Tenant   @relation(fields: [tenantId], references: [id])
+  periodStart           DateTime
+  periodEnd             DateTime
+  warehousesCount       Int      @default(0)
+  usersCount            Int      @default(0)
+  apiKeysCount          Int      @default(0)
+  monthlyOrdersCount    Int      @default(0)
+  monthlyShipmentsCount Int      @default(0)
+  integrationsCount     Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([tenantId, periodStart, periodEnd])
+}
+
+model BillingEvent {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  eventType String
+  amount    Float?
+  currency  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
 }
