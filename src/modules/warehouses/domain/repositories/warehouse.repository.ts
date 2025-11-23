@@ -12,7 +12,7 @@ export interface WarehouseRepository {
   findByCode(code: string): Promise<Warehouse | null>;
   update(
     id: string,
-    data: { name?: string; isActive?: boolean; updatedBy?: string },
+    data: { code?: string; name?: string; isActive?: boolean; updatedBy?: string },
   ): Promise<Warehouse>;
   list(params: {
     page: number;
