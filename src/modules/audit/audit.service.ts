@@ -40,11 +40,22 @@ export class AuditService {
     }
   }
 
-  async getLogs(tenantId: string, page = 1, limit = 100) {
+  async getLogs(tenantId: string, page = 1, limit = 100, start?: Date, end?: Date) {
     const { skip, take } = this.pagination.buildPaginationParams(page, limit);
     const now = new Date();
     const rows = await this.prisma.auditLog.findMany({
-      where: { tenantId, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+      where: {
+        tenantId,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+        ...(start || end
+          ? {
+              createdAt: {
+                ...(start ? { gte: start } : {}),
+                ...(end ? { lte: end } : {}),
+              },
+            }
+          : {}),
+      },
       orderBy: { createdAt: 'desc' },
       skip,
       take,
@@ -69,6 +80,49 @@ export class AuditService {
 
   getTraces() {
     return this.traces;
+  }
+
+  async exportAccessReviews(tenantId: string, start?: Date, end?: Date) {
+    const reviews = await this.prisma.accessReview.findMany({
+      where: {
+        tenantId,
+        ...(start || end
+          ? {
+              createdAt: {
+                ...(start ? { gte: start } : {}),
+                ...(end ? { lte: end } : {}),
+              },
+            }
+          : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+
+    return reviews.map((review) => ({
+      id: review.id,
+      periodStart: review.periodStart,
+      periodEnd: review.periodEnd,
+      status: review.status,
+      summary: review.summary,
+      evidenceUrl: review.evidenceUrl,
+      responsibleUserId: review.responsibleUserId,
+      reviewerUserId: review.reviewerUserId,
+      reviewedAt: review.reviewedAt,
+      orphaned: review.orphaned,
+      excessive: review.excessive,
+      findings: review.findings,
+      createdAt: review.createdAt,
+      updatedAt: review.updatedAt,
+      lastExportedAt: review.lastExportedAt,
+    }));
+  }
+
+  async markReviewExported(reviewId: string) {
+    await this.prisma.accessReview.update({
+      where: { id: reviewId },
+      data: { lastExportedAt: new Date() },
+    });
   }
 
   private loadEncryptionKey(): Buffer | null {
