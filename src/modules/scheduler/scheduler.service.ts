@@ -50,4 +50,19 @@ export class SchedulerService {
     );
     this.logger.log(`Scheduled maintenance jobs for ${tenants.length} tenants`);
   }
+
+  @Cron(CronExpression.EVERY_DAY_AT_1AM)
+  async enqueueExpiredAuditLogPurge() {
+    const tenants = await this.prisma.tenant.findMany({ where: { isActive: true } });
+    const retentionDays = Number(process.env.AUDIT_LOG_RETENTION_DAYS ?? 365);
+    await Promise.all(
+      tenants.map((tenant) =>
+        this.queues.enqueueMaintenanceJob(tenant.id, {
+          action: 'purge-expired-audit-logs',
+          olderThanDays: Number.isFinite(retentionDays) && retentionDays > 0 ? retentionDays : 365,
+        }),
+      ),
+    );
+    this.logger.log(`Scheduled audit log purge for ${tenants.length} tenants`);
+  }
 }
