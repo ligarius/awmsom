@@ -22,7 +22,10 @@
 
 ## Endpoints / casos de uso y artefactos
 - **Auth**
-  - `GET /auth/health` → chequeo de disponibilidad. Código: `src/modules/auth/auth.controller.ts`. 
+  - `GET /auth/health` → chequeo de disponibilidad. Código: `src/modules/auth/auth.controller.ts`.
+  - Gestión de usuarios por tenant: `GET /auth/tenants/:tenantId/users` (404 si el tenant no existe, 401 si está inactivo).
+  - Control de estado: `PATCH /auth/users/:id/deactivate` retorna 409 si el usuario ya está inactivo, 404 si no existe y 401 si el tenant está inactivo.
+  - Eliminación: `DELETE /auth/users/:id` requiere tenant activo y usuario activo; responde 404 si el usuario no existe y 409 si está inactivo.
 - **Warehouses (catálogo)**
   - `POST /warehouses`, `GET /warehouses`, `GET /warehouses/:id`, `PUT /warehouses/:id`, `DELETE /warehouses/:id`.
   - Reglas: códigos únicos, manejo de errores 404/409. Código: `src/modules/warehouses/warehouses.controller.ts` y capa de aplicación/mappers asociada.
