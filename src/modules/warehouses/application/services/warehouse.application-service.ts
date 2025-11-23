@@ -46,7 +46,15 @@ export class WarehouseApplicationService {
       throw new WarehouseNotFoundError();
     }
 
+    if (command.code !== undefined) {
+      const duplicated = await this.repository.findByCode(command.code);
+      if (duplicated && duplicated.id !== id) {
+        throw new WarehouseCodeAlreadyExistsError();
+      }
+    }
+
     if (
+      command.code === undefined &&
       command.name === undefined &&
       command.isActive === undefined &&
       command.updatedBy === undefined

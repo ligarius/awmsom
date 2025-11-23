@@ -8,6 +8,7 @@ export interface CreateWarehouseCommand {
 }
 
 export interface UpdateWarehouseCommand {
+  code?: string;
   name?: string;
   isActive?: boolean;
   updatedBy?: string;
