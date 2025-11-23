@@ -104,11 +104,15 @@ describe('Auth module', () => {
   let prisma: MockPrismaService;
   let authService: AuthService;
   let userAccountService: UserAccountService;
+  const providerSecret = 'provider-secret';
+  const providerAudience = 'awmsom-audience';
 
   beforeEach(() => {
     prisma = new MockPrismaService();
     userAccountService = new UserAccountService(prisma as any);
     authService = new AuthService(prisma as any, undefined as any, userAccountService as any);
+    process.env.OAUTH_OIDC_DEMO_SECRET = providerSecret;
+    process.env.OAUTH_OIDC_DEMO_AUDIENCE = providerAudience;
   });
 
   it('registers users with hashed passwords and prevents duplicates per tenant', async () => {
@@ -189,25 +193,51 @@ describe('Auth module', () => {
   it('supports logging in via OAuth provider mapping identities to users', async () => {
     const tenant = prisma.tenant.create({ data: { name: 'Tenant', code: 'T-OAUTH', plan: 'pro' } });
 
+    const idToken = jwt.sign(
+      { sub: 'abc-123', aud: providerAudience, email: 'federated@example.com' },
+      providerSecret,
+      { expiresIn: '1h' },
+    );
+
     const firstLogin = await authService.oauthLogin({
       provider: 'oidc-demo',
       providerUserId: 'abc-123',
       tenantId: tenant.id,
-      email: 'federated@example.com',
+      idToken,
     });
 
     expect(firstLogin.access_token).toBeDefined();
     expect(prisma.oauthIdentities).toHaveLength(1);
+    expect(prisma.oauthIdentities[0].providerUserId).toBe('abc-123');
 
     const secondLogin = await authService.oauthLogin({
       provider: 'oidc-demo',
       providerUserId: 'abc-123',
       tenantId: tenant.id,
-      email: 'federated@example.com',
+      idToken,
     });
 
     expect(secondLogin.access_token).toBeDefined();
     expect(prisma.users).toHaveLength(1);
+  });
+
+  it('rejects OAuth logins without a valid token', async () => {
+    const tenant = prisma.tenant.create({ data: { name: 'Tenant', code: 'T-OAUTH2', plan: 'pro' } });
+
+    await expect(
+      authService.oauthLogin({ provider: 'oidc-demo', providerUserId: 'missing', tenantId: tenant.id }),
+    ).rejects.toThrow('OAuth token is required');
+
+    const mismatchedToken = jwt.sign({ sub: 'wrong', aud: providerAudience }, providerSecret, { expiresIn: '1h' });
+
+    await expect(
+      authService.oauthLogin({
+        provider: 'oidc-demo',
+        providerUserId: 'abc-123',
+        tenantId: tenant.id,
+        idToken: mismatchedToken,
+      }),
+    ).rejects.toThrow('Invalid OAuth token');
   });
 
   it('rejects login for inactive tenants or users', async () => {

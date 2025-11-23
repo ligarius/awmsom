@@ -259,6 +259,54 @@ export class AuthService {
     return this.issueToken(user);
   }
 
+  private normalizeProviderKey(provider: string) {
+    return provider
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '_')
+      .replace(/__+/g, '_');
+  }
+
+  private getProviderConfig(provider: string) {
+    const key = this.normalizeProviderKey(provider);
+    const secret = process.env[`OAUTH_${key}_SECRET`];
+    const audience = process.env[`OAUTH_${key}_AUDIENCE`];
+
+    if (!secret) {
+      console.warn(`OAuth provider ${provider} is not configured with a verification secret`);
+      throw new UnauthorizedException('OAuth provider misconfigured');
+    }
+
+    return { secret, audience };
+  }
+
+  private verifyProviderToken(provider: string, tokens: { idToken?: string; accessToken?: string }, expectedSub: string) {
+    const token = tokens.idToken ?? tokens.accessToken;
+
+    if (!token) {
+      console.warn(`OAuth login attempt missing token for provider ${provider}`);
+      throw new UnauthorizedException('OAuth token is required');
+    }
+
+    const config = this.getProviderConfig(provider);
+
+    try {
+      const payload = jwt.verify(token, config.secret, config.audience ? { audience: config.audience } : undefined) as any;
+
+      if (config.audience && payload.aud !== config.audience) {
+        throw new Error('Invalid audience');
+      }
+
+      if (payload.sub && payload.sub !== expectedSub) {
+        throw new Error('Token subject mismatch');
+      }
+
+      return payload;
+    } catch (error: any) {
+      console.warn(`Failed OAuth token verification for provider ${provider}:`, error?.message ?? error);
+      throw new UnauthorizedException('Invalid OAuth token');
+    }
+  }
+
   async oauthLogin(dto: OAuthLoginDto) {
     const prisma = this.prisma as any;
     const tenant = await prisma.tenant.findUnique({ where: { id: dto.tenantId } });
@@ -269,21 +317,32 @@ export class AuthService {
       throw new UnauthorizedException('Tenant inactive');
     }
 
+    const tokenPayload = this.verifyProviderToken(
+      dto.provider,
+      { idToken: dto.idToken, accessToken: dto.accessToken },
+      dto.providerUserId,
+    );
+
+    const providerUserId = tokenPayload?.sub ?? dto.providerUserId;
+    if (!providerUserId) {
+      throw new UnauthorizedException('Provider user identifier missing');
+    }
+
     const existingIdentity = await prisma.oauthIdentity.findFirst({
-      where: { tenantId: dto.tenantId, provider: dto.provider, providerUserId: dto.providerUserId },
+      where: { tenantId: dto.tenantId, provider: dto.provider, providerUserId },
     });
 
     let user = existingIdentity ? await prisma.user.findUnique({ where: { id: existingIdentity.userId } }) : null;
 
     if (!user) {
-      const email = dto.email ?? `${dto.providerUserId}@${dto.provider}.example.com`;
+      const email = tokenPayload?.email ?? dto.email ?? `${providerUserId}@${dto.provider}.example.com`;
       const password = crypto.randomBytes(12).toString('hex');
       user = await this.userAccountService.createUser({ tenantId: dto.tenantId, email, password, isActive: true });
 
       await prisma.oauthIdentity.create({
         data: {
           provider: dto.provider,
-          providerUserId: dto.providerUserId,
+          providerUserId,
           tenantId: dto.tenantId,
           userId: user.id,
           displayName: dto.displayName ?? dto.providerUserId,

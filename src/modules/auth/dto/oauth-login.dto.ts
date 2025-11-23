@@ -10,6 +10,14 @@ export class OAuthLoginDto {
   providerUserId!: string;
 
   @IsOptional()
+  @IsString()
+  idToken?: string;
+
+  @IsOptional()
+  @IsString()
+  accessToken?: string;
+
+  @IsOptional()
   @IsEmail()
   email?: string;
 
