@@ -168,12 +168,16 @@ describe('Auth module', () => {
     const tenant = prisma.tenant.create({ data: { name: 'Tenant', code: 'T-MFA', plan: 'pro' } });
     const user = await authService.register({ email: 'mfa@example.com', password: 'secret123', tenantId: tenant.id });
 
-    const factor = await authService.enrollFactor({
+    const enrollment = await authService.enrollFactor({
       userId: user.id,
       tenantId: tenant.id,
       type: 'totp',
       label: 'auth-app',
     });
+
+    expect((enrollment as any).otpauthUrl).toContain('otpauth://totp/');
+    const factor = prisma.mfaFactors.find((f) => f.userId === user.id && f.type === 'totp');
+    expect(factor).toBeDefined();
 
     const firstStep = (await authService.login({
       email: 'mfa@example.com',
@@ -245,6 +249,68 @@ describe('Auth module', () => {
     await expect(
       authService.verifyMfa({ challengeId: expiredChallenge.id, code: '123456' } as any),
     ).rejects.toThrow('Challenge expired');
+  });
+
+  it('rejects TOTP verifications with malformed secrets', async () => {
+    const tenant = prisma.tenant.create({ data: { name: 'Tenant', code: 'T-MFA-BAD', plan: 'pro' } });
+    const user = await authService.register({ email: 'broken@example.com', password: 'secret123', tenantId: tenant.id });
+
+    const factor = prisma.mfaFactor.create({
+      data: {
+        userId: user.id,
+        tenantId: tenant.id,
+        type: 'totp',
+        label: 'bad',
+        enabled: true,
+        secret: (authService as any).encryptTotpSecret('INVALID!SECRET'),
+      },
+    });
+
+    const challenge = prisma.mfaChallenge.create({
+      data: {
+        userId: user.id,
+        tenantId: tenant.id,
+        factorId: factor.id,
+        code: '000000',
+        expiresAt: new Date(Date.now() + 60 * 1000),
+        channelHint: 'bad',
+      },
+    });
+
+    await expect(authService.verifyMfa({ challengeId: challenge.id, code: '111111' } as any)).rejects.toThrow(
+      'Invalid TOTP secret format',
+    );
+  });
+
+  it('rejects TOTP verifications with short secrets', async () => {
+    const tenant = prisma.tenant.create({ data: { name: 'Tenant', code: 'T-MFA-SHORT', plan: 'pro' } });
+    const user = await authService.register({ email: 'short@example.com', password: 'secret123', tenantId: tenant.id });
+
+    const factor = prisma.mfaFactor.create({
+      data: {
+        userId: user.id,
+        tenantId: tenant.id,
+        type: 'totp',
+        label: 'short',
+        enabled: true,
+        secret: (authService as any).encryptTotpSecret('SHORTKEY'),
+      },
+    });
+
+    const challenge = prisma.mfaChallenge.create({
+      data: {
+        userId: user.id,
+        tenantId: tenant.id,
+        factorId: factor.id,
+        code: '000000',
+        expiresAt: new Date(Date.now() + 60 * 1000),
+        channelHint: 'short',
+      },
+    });
+
+    await expect(authService.verifyMfa({ challengeId: challenge.id, code: '222222' } as any)).rejects.toThrow(
+      'TOTP secret too short',
+    );
   });
 
   it('supports logging in via OAuth provider mapping identities to users', async () => {
