@@ -3,6 +3,9 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { UpdateCredentialsDto } from './dto/update-credentials.dto';
+import { MfaEnrollDto } from './dto/mfa-enroll.dto';
+import { VerifyMfaDto } from './dto/verify-mfa.dto';
+import { OAuthLoginDto } from './dto/oauth-login.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -18,9 +21,24 @@ export class AuthController {
     return this.authService.login(dto);
   }
 
+  @Post('login/oauth')
+  oauthLogin(@Body() dto: OAuthLoginDto) {
+    return this.authService.oauthLogin(dto);
+  }
+
   @Post('register')
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
+  }
+
+  @Post('mfa/factors')
+  enrollFactor(@Body() dto: MfaEnrollDto) {
+    return this.authService.enrollFactor(dto);
+  }
+
+  @Post('mfa/verify')
+  verifyMfa(@Body() dto: VerifyMfaDto) {
+    return this.authService.verifyMfa(dto);
   }
 
   @Get('tenants/:tenantId/users')

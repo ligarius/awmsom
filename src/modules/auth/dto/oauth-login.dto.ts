@@ -1,12 +1,17 @@
 import { IsEmail, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
-export class LoginDto {
-  @IsEmail()
-  email!: string;
+export class OAuthLoginDto {
+  @IsString()
+  @IsNotEmpty()
+  provider!: string;
 
   @IsString()
   @IsNotEmpty()
-  password!: string;
+  providerUserId!: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
 
   @IsString()
   @IsNotEmpty()
@@ -14,13 +19,5 @@ export class LoginDto {
 
   @IsOptional()
   @IsString()
-  challengeId?: string;
-
-  @IsOptional()
-  @IsString()
-  mfaCode?: string;
-
-  @IsOptional()
-  @IsString()
-  factorId?: string;
+  displayName?: string;
 }

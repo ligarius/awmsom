@@ -6,6 +6,9 @@ class MockPrismaService {
   private id = 1;
   tenants: any[] = [];
   users: any[] = [];
+  mfaFactors: any[] = [];
+  mfaChallenges: any[] = [];
+  oauthIdentities: any[] = [];
   userRole = { findMany: () => [] };
 
   private nextId() {
@@ -19,6 +22,19 @@ class MockPrismaService {
       return record;
     },
     findUnique: ({ where }: any) => this.tenants.find((t) => t.id === where.id) ?? null,
+  };
+
+  oauthIdentity = {
+    findFirst: ({ where }: any) =>
+      this.oauthIdentities.find(
+        (i) =>
+          i.tenantId === where.tenantId && i.provider === where.provider && i.providerUserId === where.providerUserId,
+      ) ?? null,
+    create: ({ data }: any) => {
+      const record = { id: this.nextId(), ...data };
+      this.oauthIdentities.push(record);
+      return record;
+    },
   };
 
   user = {
@@ -55,6 +71,30 @@ class MockPrismaService {
       }
       const [deleted] = this.users.splice(idx, 1);
       return deleted;
+    },
+  };
+
+  mfaFactor = {
+    findMany: ({ where }: any) => this.mfaFactors.filter((f) => f.userId === where.userId && f.enabled === true),
+    create: ({ data }: any) => {
+      const record = { id: this.nextId(), createdAt: new Date(), updatedAt: new Date(), ...data };
+      this.mfaFactors.push(record);
+      return record;
+    },
+  };
+
+  mfaChallenge = {
+    findUnique: ({ where }: any) => this.mfaChallenges.find((c) => c.id === where.id) ?? null,
+    create: ({ data }: any) => {
+      const record = { id: this.nextId(), createdAt: new Date(), consumedAt: null, ...data };
+      this.mfaChallenges.push(record);
+      return record;
+    },
+    update: ({ where, data }: any) => {
+      const challenge = this.mfaChallenges.find((c) => c.id === where.id);
+      if (!challenge) return null;
+      Object.assign(challenge, data);
+      return challenge;
     },
   };
 }
@@ -107,12 +147,63 @@ describe('Auth module', () => {
       tenantId: tenant.id,
     });
 
-    const result = await authService.login({ email: 'user@example.com', password: 'secret123', tenantId: tenant.id });
+    const result = (await authService.login({
+      email: 'user@example.com',
+      password: 'secret123',
+      tenantId: tenant.id,
+    })) as any;
     const decoded = jwt.verify(result.access_token, 'defaultSecret') as any;
 
     expect(decoded.tenantId).toBe(tenant.id);
     expect(result.payload.tenantId).toBe(tenant.id);
     expect(decoded.sub).toBe(result.payload.sub);
+  });
+
+  it('requires MFA when factors are present and returns a challenge', async () => {
+    const tenant = prisma.tenant.create({ data: { name: 'Tenant', code: 'T-MFA', plan: 'pro' } });
+    const user = await authService.register({ email: 'mfa@example.com', password: 'secret123', tenantId: tenant.id });
+
+    const factor = await authService.enrollFactor({
+      userId: user.id,
+      tenantId: tenant.id,
+      type: 'totp',
+      label: 'auth-app',
+    });
+
+    const firstStep = (await authService.login({
+      email: 'mfa@example.com',
+      password: 'secret123',
+      tenantId: tenant.id,
+    })) as any;
+    expect(firstStep.mfaRequired).toBe(true);
+    expect(firstStep.factor.id).toBe(factor.id);
+
+    const verified = await authService.verifyMfa({ challengeId: firstStep.challengeId, code: firstStep.code } as any);
+    expect(verified.access_token).toBeDefined();
+  });
+
+  it('supports logging in via OAuth provider mapping identities to users', async () => {
+    const tenant = prisma.tenant.create({ data: { name: 'Tenant', code: 'T-OAUTH', plan: 'pro' } });
+
+    const firstLogin = await authService.oauthLogin({
+      provider: 'oidc-demo',
+      providerUserId: 'abc-123',
+      tenantId: tenant.id,
+      email: 'federated@example.com',
+    });
+
+    expect(firstLogin.access_token).toBeDefined();
+    expect(prisma.oauthIdentities).toHaveLength(1);
+
+    const secondLogin = await authService.oauthLogin({
+      provider: 'oidc-demo',
+      providerUserId: 'abc-123',
+      tenantId: tenant.id,
+      email: 'federated@example.com',
+    });
+
+    expect(secondLogin.access_token).toBeDefined();
+    expect(prisma.users).toHaveLength(1);
   });
 
   it('rejects login for inactive tenants or users', async () => {
