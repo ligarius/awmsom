@@ -28,6 +28,11 @@ import { PlansModule } from './modules/plans/plans.module';
 import { UsageModule } from './modules/usage/usage.module';
 import { TraceabilityModule } from './modules/traceability/traceability.module';
 import { KpisModule } from './modules/kpis/kpis.module';
+import { RedisModule } from './infrastructure/redis/redis.module';
+import { CacheModule } from './common/cache/cache.module';
+import { QueuesModule } from './infrastructure/queues/queues.module';
+import { SnapshotsModule } from './modules/snapshots/snapshots.module';
+import { SchedulerModule } from './modules/scheduler/scheduler.module';
 
 @Module({
   imports: [
@@ -56,6 +61,11 @@ import { KpisModule } from './modules/kpis/kpis.module';
     UsageModule,
     TraceabilityModule,
     KpisModule,
+    RedisModule,
+    CacheModule,
+    QueuesModule,
+    SnapshotsModule,
+    SchedulerModule,
   ],
   providers: [
     RateLimitService,

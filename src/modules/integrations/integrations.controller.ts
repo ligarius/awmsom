@@ -3,6 +3,7 @@ import { TenantContextService } from '../../common/tenant-context.service';
 import { CreateIntegrationConfigDto } from './dto/create-integration-config.dto';
 import { UpdateIntegrationConfigDto } from './dto/update-integration-config.dto';
 import { IntegrationsService } from './integrations.service';
+import { PaginationDto } from '../../common/dto/pagination.dto';
 
 @Controller('integrations')
 export class IntegrationsController {
@@ -18,6 +19,12 @@ export class IntegrationsController {
   list(@Query('type') type?: any) {
     const tenantId = this.tenantContext.getTenantId();
     return this.integrationsService.listIntegrations(tenantId, type);
+  }
+
+  @Get('jobs')
+  listJobs(@Query() query: PaginationDto) {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.integrationsService.listIntegrationJobs(tenantId, query.page, query.limit);
   }
 
   @Get(':id')

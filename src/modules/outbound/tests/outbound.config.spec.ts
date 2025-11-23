@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { OutboundService } from '../outbound.service';
+import { PaginationService } from '../../../common/pagination/pagination.service';
 
 class MockPrismaService {
   tenantId = 'tenant-1';
@@ -103,7 +104,13 @@ describe('OutboundService with outbound rules', () => {
       location: { warehouseId: 'wh-1' },
     });
 
-    service = new OutboundService(prisma as any, tenantContext, configService, optimizationService);
+    service = new OutboundService(
+      prisma as any,
+      tenantContext,
+      configService,
+      optimizationService,
+      new PaginationService(),
+    );
   });
 
   it('throws when full allocation is required but not possible', async () => {

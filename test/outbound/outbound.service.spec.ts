@@ -7,6 +7,7 @@ import {
 } from '@prisma/client';
 import { OutboundService } from '../../src/modules/outbound/outbound.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { PaginationService } from '../../src/common/pagination/pagination.service';
 
 const decimal = (value: number) => new Prisma.Decimal(value);
 
@@ -25,6 +26,7 @@ describe('OutboundService', () => {
   let tx: any;
   let service: OutboundService;
   let tenantContext: { getTenantId: jest.Mock };
+  const pagination = new PaginationService();
 
   beforeEach(() => {
     tenantContext = { getTenantId: jest.fn().mockReturnValue('tenant-1') };
@@ -68,7 +70,13 @@ describe('OutboundService', () => {
       planWarehouseBalance: jest.fn(),
     };
 
-    service = new OutboundService(prisma, tenantContext as any, configService as any, optimizationService as any);
+    service = new OutboundService(
+      prisma,
+      tenantContext as any,
+      configService as any,
+      optimizationService as any,
+      pagination,
+    );
   });
 
   it('creates an outbound order in DRAFT with lines', async () => {

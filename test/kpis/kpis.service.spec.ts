@@ -1,5 +1,6 @@
 import { KpisService } from '../../src/modules/kpis/kpis.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { CacheService } from '../../src/common/cache/cache.service';
 
 describe('KpisService', () => {
   let prisma: any;
@@ -7,17 +8,19 @@ describe('KpisService', () => {
 
   beforeEach(() => {
     prisma = {
-      outboundOrderLine: { findMany: jest.fn() },
+      outboundOrderLine: { findMany: jest.fn(), aggregate: jest.fn() },
       shipment: { findMany: jest.fn() },
-      inventory: { findMany: jest.fn(), groupBy: jest.fn() },
+      inventory: { findMany: jest.fn(), groupBy: jest.fn(), aggregate: jest.fn() },
       location: { count: jest.fn() },
       pickingTask: { findMany: jest.fn() },
       inventoryAdjustment: { findMany: jest.fn() },
     } as unknown as PrismaService;
-    service = new KpisService(prisma);
+    service = new KpisService(prisma, new CacheService({ get: jest.fn(), set: jest.fn(), del: jest.fn() } as any));
 
     (prisma.location.count as jest.Mock).mockResolvedValue(0);
     (prisma.inventory.groupBy as jest.Mock).mockResolvedValue([]);
+    (prisma.outboundOrderLine.aggregate as jest.Mock).mockResolvedValue({ _sum: { requestedQty: 0, pickedQty: 0 } });
+    (prisma.inventory.aggregate as jest.Mock).mockResolvedValue({ _sum: { quantity: 0 } });
   });
 
   it('calculates fill rate and otif', async () => {
@@ -25,6 +28,7 @@ describe('KpisService', () => {
       { requestedQty: 10, pickedQty: 8, outboundOrder: {} },
       { requestedQty: 5, pickedQty: 5, outboundOrder: {} },
     ]);
+    (prisma.outboundOrderLine.aggregate as jest.Mock).mockResolvedValue({ _sum: { requestedQty: 15, pickedQty: 13 } });
     (prisma.shipment.findMany as jest.Mock).mockResolvedValue([
       {
         actualDeparture: new Date('2024-01-02'),
@@ -84,6 +88,7 @@ describe('KpisService', () => {
   });
 
   it('calculates inventory turnover basics', async () => {
+    (prisma.outboundOrderLine.aggregate as jest.Mock).mockResolvedValue({ _sum: { requestedQty: 0, pickedQty: 4 } });
     (prisma.outboundOrderLine.findMany as jest.Mock).mockResolvedValue([
       { requestedQty: 4, pickedQty: 4, outboundOrder: {} },
     ]);
@@ -91,6 +96,7 @@ describe('KpisService', () => {
     (prisma.inventory.findMany as jest.Mock).mockResolvedValue([
       { quantity: 10 },
     ]);
+    (prisma.inventory.aggregate as jest.Mock).mockResolvedValue({ _sum: { quantity: 10 } });
     (prisma.pickingTask.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.inventoryAdjustment.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.inventory.groupBy as jest.Mock).mockResolvedValue([]);
@@ -106,6 +112,7 @@ describe('KpisService', () => {
     (prisma.outboundOrderLine.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.shipment.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.inventory.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.inventory.aggregate as jest.Mock).mockResolvedValue({ _sum: { quantity: 0 } });
     (prisma.inventory.groupBy as jest.Mock).mockResolvedValue([{ locationId: 'loc-1' }, { locationId: 'loc-2' }]);
     (prisma.location.count as jest.Mock).mockResolvedValue(4);
     (prisma.inventoryAdjustment.findMany as jest.Mock).mockResolvedValue([]);
