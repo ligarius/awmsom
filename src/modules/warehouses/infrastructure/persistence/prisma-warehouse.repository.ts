@@ -4,6 +4,7 @@ import { Warehouse } from '../../domain/entities/warehouse.entity';
 import { WarehouseRepository } from '../../domain/repositories/warehouse.repository';
 import { CreateWarehouseCommand, WarehouseQuery } from '../../application/dto/warehouse-commands.dto';
 import { TenantContextService } from '../../../../common/tenant-context.service';
+import { WarehouseCodeAlreadyExistsError } from '../../application/exceptions/warehouse.exceptions';
 
 @Injectable()
 export class PrismaWarehouseRepository implements WarehouseRepository {
@@ -47,11 +48,23 @@ export class PrismaWarehouseRepository implements WarehouseRepository {
 
   async update(
     id: string,
-    data: { name?: string; isActive?: boolean; updatedBy?: string },
+    data: { code?: string; name?: string; isActive?: boolean; updatedBy?: string },
   ): Promise<Warehouse> {
     const prisma = this.prisma as any;
+    const tenantId = this.tenantContext.getTenantId();
+
+    if (data.code) {
+      const duplicate = await prisma.warehouse.findFirst({
+        where: { code: data.code, tenantId, NOT: { id } },
+      });
+
+      if (duplicate) {
+        throw new WarehouseCodeAlreadyExistsError();
+      }
+    }
+
     const record = await prisma.warehouse.update({
-      where: { id, tenantId: this.tenantContext.getTenantId() },
+      where: { id, tenantId },
       data,
     });
 
