@@ -406,6 +406,7 @@ model Batch {
   tenantId   String
   productId  String
   batchCode  String
+  code       String
   expiryDate DateTime?
   status     BatchStatus @default(NORMAL)
   createdAt  DateTime    @default(now())
@@ -425,6 +426,8 @@ model Batch {
 
   @@index([productId, batchCode])
   @@index([tenantId])
+  @@index([tenantId, code])
+  @@index([tenantId, productId, code])
 }
 
 model Inventory {
@@ -539,6 +542,8 @@ model MovementLine {
 
   @@index([movementHeaderId, productId, batchId])
   @@index([tenantId])
+  @@index([tenantId, batchId])
+  @@index([tenantId, productId, batchId])
 }
 
 model CycleCountTask {
@@ -624,6 +629,8 @@ model OutboundOrder {
   warehouseId       String
   externalRef       String?
   customerRef       String?
+  customerId        String?
+  customer          Customer?           @relation(fields: [customerId], references: [id])
   status            OutboundOrderStatus
   requestedShipDate DateTime?
   createdAt         DateTime            @default(now())
@@ -639,6 +646,29 @@ model OutboundOrder {
 
   @@index([warehouseId, status, requestedShipDate])
   @@index([tenantId])
+  @@index([tenantId, customerId])
+  @@index([tenantId, customerRef])
+}
+
+model Customer {
+  id         String   @id @default(uuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+
+  code       String
+  name       String
+  taxId      String?
+  address    String?
+  city       String?
+  country    String?
+
+  outboundOrders OutboundOrder[]
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([tenantId])
+  @@unique([tenantId, code])
 }
 
 model OutboundOrderLine {
