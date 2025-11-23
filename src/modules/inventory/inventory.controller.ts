@@ -9,14 +9,37 @@ import {
 } from './dto/cycle-count.dto';
 import { CreateInventoryAdjustmentDto, InventoryAdjustmentQueryDto } from './dto/inventory-adjustment.dto';
 import { InventoryService } from './inventory.service';
+import { InventoryOptimizationService } from './inventory-optimization.service';
+import { GenerateSlottingRuleDto, RelocationSuggestionDto, WarehouseBalanceDto } from './dto/slotting.dto';
 
 @Controller('inventory')
 export class InventoryController {
-  constructor(private readonly inventoryService: InventoryService) {}
+  constructor(
+    private readonly inventoryService: InventoryService,
+    private readonly optimizationService: InventoryOptimizationService,
+  ) {}
 
   @Get('health')
   health() {
     return this.inventoryService.health();
+  }
+
+  @Post('slotting/rules')
+  @Permissions(PermissionResource.INVENTORY, PermissionAction.CONFIG)
+  generateSlottingRules(@Body() dto: GenerateSlottingRuleDto) {
+    return this.optimizationService.generateSlottingRules(dto);
+  }
+
+  @Post('relocations/suggestions')
+  @Permissions(PermissionResource.INVENTORY, PermissionAction.READ)
+  suggestRelocations(@Body() dto: RelocationSuggestionDto) {
+    return this.optimizationService.suggestRelocations(dto);
+  }
+
+  @Post('warehouses/balance')
+  @Permissions(PermissionResource.INVENTORY, PermissionAction.APPROVE)
+  planWarehouseBalance(@Body() dto: WarehouseBalanceDto) {
+    return this.optimizationService.planWarehouseBalance(dto);
   }
 
   @Post('cycle-counts')

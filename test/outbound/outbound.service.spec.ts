@@ -64,7 +64,11 @@ describe('OutboundService', () => {
       getPickingMethods: jest.fn().mockResolvedValue([]),
     };
 
-    service = new OutboundService(prisma, tenantContext as any, configService as any);
+    const optimizationService = {
+      planWarehouseBalance: jest.fn(),
+    };
+
+    service = new OutboundService(prisma, tenantContext as any, configService as any, optimizationService as any);
   });
 
   it('creates an outbound order in DRAFT with lines', async () => {

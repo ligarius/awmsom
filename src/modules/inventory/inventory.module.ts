@@ -3,6 +3,7 @@ import { PrismaModule } from '../../prisma/prisma.module';
 import { ConfigModule } from '../config/config.module';
 import { InventoryController } from './inventory.controller';
 import { InventoryService } from './inventory.service';
+import { InventoryOptimizationService } from './inventory-optimization.service';
 import { BlockLotUseCase } from './application/use-cases/block-lot.use-case';
 import { AdjustStockUseCase } from './application/use-cases/adjust-stock.use-case';
 import { SelectFefoLotUseCase } from './application/use-cases/select-fefo-lot.use-case';
@@ -19,6 +20,7 @@ import { PrismaInventoryMovementRepository } from './infrastructure/persistence/
   controllers: [InventoryController],
   providers: [
     InventoryService,
+    InventoryOptimizationService,
     BlockLotUseCase,
     AdjustStockUseCase,
     SelectFefoLotUseCase,
@@ -29,6 +31,7 @@ import { PrismaInventoryMovementRepository } from './infrastructure/persistence/
   ],
   exports: [
     InventoryService,
+    InventoryOptimizationService,
     BlockLotUseCase,
     AdjustStockUseCase,
     SelectFefoLotUseCase,
