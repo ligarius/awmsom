@@ -6,6 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { UserAccountService } from '../users/user-account.service';
 import { RbacService } from '../rbac/rbac.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -20,6 +21,7 @@ export class AuthService {
     private readonly rbacService: RbacService = {
       getUserPermissions: async () => [],
     } as unknown as RbacService,
+    private readonly userAccountService: UserAccountService = new UserAccountService(prisma as any),
   ) {}
 
   private readonly jwtSecret = process.env.JWT_SECRET || 'defaultSecret';
@@ -78,29 +80,7 @@ export class AuthService {
   }
 
   async register(dto: RegisterDto) {
-    const prisma = this.prisma as any;
-    const tenant = await prisma.tenant.findUnique({ where: { id: dto.tenantId } });
-    if (!tenant) {
-      throw new BadRequestException('Tenant not found');
-    }
-    if (!tenant.isActive) {
-      throw new UnauthorizedException('Tenant inactive');
-    }
-
-    const existing = await prisma.user.findFirst({ where: { tenantId: dto.tenantId, email: dto.email } });
-    if (existing) {
-      throw new ConflictException('User already exists');
-    }
-
-    const passwordHash = await bcrypt.hash(dto.password, 10);
-    const user = await prisma.user.create({
-      data: {
-        email: dto.email,
-        passwordHash,
-        tenantId: dto.tenantId,
-        isActive: dto.isActive ?? true,
-      },
-    });
+    const user = await this.userAccountService.createUser(dto);
 
     return this.sanitizeUser(user);
   }
@@ -142,7 +122,7 @@ export class AuthService {
 
     const data: any = { isActive: dto.isActive ?? user.isActive };
     if (dto.password) {
-      data.passwordHash = await bcrypt.hash(dto.password, 10);
+      data.passwordHash = await this.userAccountService.hashPassword(dto.password);
     }
 
     const updated = await prisma.user.update({ where: { id }, data });
