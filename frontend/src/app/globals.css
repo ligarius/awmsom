@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Global design tokens for the WMS SaaS UI. Colors follow an industrial
+ * palette inspired by logistics operations. Adjust once the design
+ * system matures in future sprints.
+ */
+:root {
+  --background: 210 20% 98%;
+  --foreground: 210 30% 12%;
+  --muted: 215 16% 92%;
+  --muted-foreground: 215 16% 35%;
+  --card: 0 0% 100%;
+  --card-foreground: 215 28% 17%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 215 28% 17%;
+  --border: 215 16% 85%;
+  --input: 215 16% 85%;
+  --primary: 217 91% 60%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 215 20% 70%;
+  --secondary-foreground: 215 28% 17%;
+  --destructive: 0 72% 55%;
+  --destructive-foreground: 0 0% 100%;
+  --ring: 217 91% 60%;
+  --radius: 10px;
+}
+
+.dark {
+  --background: 215 15% 9%;
+  --foreground: 210 27% 95%;
+  --muted: 215 15% 15%;
+  --muted-foreground: 215 15% 65%;
+  --card: 215 15% 12%;
+  --card-foreground: 210 27% 95%;
+  --popover: 215 15% 12%;
+  --popover-foreground: 210 27% 95%;
+  --border: 215 15% 20%;
+  --input: 215 15% 20%;
+  --primary: 217 91% 60%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 215 10% 25%;
+  --secondary-foreground: 210 27% 95%;
+  --destructive: 0 72% 55%;
+  --destructive-foreground: 0 0% 100%;
+  --ring: 217 91% 60%;
+  --radius: 10px;
+}
+
+* {
+  @apply border-border;
+}
+
+body {
+  @apply bg-background text-foreground antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--secondary));
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary));
+}
