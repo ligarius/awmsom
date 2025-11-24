@@ -65,6 +65,118 @@ export interface ProductInventoryDetail {
   recentMovements: Movement[];
 }
 
+export type OutboundStatus = "CREATED" | "RELEASED" | "PICKING" | "PACKED" | "SHIPPED";
+
+export interface OutboundLine {
+  id: string;
+  productId: string;
+  productSku: string;
+  productName?: string;
+  quantity: number;
+  pickedQuantity?: number;
+  uom?: string;
+  locationCode?: string;
+  batchRequired?: boolean;
+}
+
+export interface OutboundOrder {
+  id: string;
+  code: string;
+  client: string;
+  warehouseId?: string;
+  warehouseName?: string;
+  commitmentDate?: string;
+  status: OutboundStatus;
+  lines: OutboundLine[];
+  pickerId?: string | null;
+  pickerName?: string | null;
+  waveId?: string | null;
+  totalLines?: number;
+  createdAt?: string;
+}
+
+export type PickingTaskStatus = "PENDING" | "IN_PROGRESS" | "DONE";
+
+export interface PickingTask {
+  id: string;
+  code: string;
+  productId: string;
+  productSku: string;
+  productName?: string;
+  quantity: number;
+  uom?: string;
+  locationId?: string;
+  locationCode?: string;
+  status: PickingTaskStatus;
+  waveId?: string;
+  orderCode?: string;
+  batch?: string | null;
+}
+
+export type WaveStatus = "CREATED" | "PLANNED" | "RELEASED" | "PICKING" | "DONE";
+
+export interface Wave {
+  id: string;
+  code: string;
+  status: WaveStatus;
+  orders: OutboundOrder[];
+  pickerId?: string | null;
+  pickerName?: string | null;
+  warehouseId?: string;
+  warehouseName?: string;
+  ordersCount?: number;
+  skuCount?: number;
+  totalLines?: number;
+}
+
+export interface PickingPathStop {
+  sequence: number;
+  aisle?: string;
+  rack?: string;
+  level?: string;
+  locationCode: string;
+  productSku: string;
+  productName?: string;
+  quantity: number;
+}
+
+export interface PickingPathPlan {
+  waveId: string;
+  totalDistance: number;
+  estimatedTimeMinutes: number;
+  stops: PickingPathStop[];
+}
+
+export interface PackingShipmentLine {
+  productSku: string;
+  productName?: string;
+  quantity: number;
+  packedQuantity?: number;
+  uom?: string;
+}
+
+export interface PackingShipment {
+  id: string;
+  code?: string;
+  client: string;
+  waveId?: string;
+  lines: PackingShipmentLine[];
+  status?: string;
+}
+
+export type ShipmentStatus = "CREATED" | "PACKED" | "SHIPPED";
+
+export interface Shipment {
+  id: string;
+  code: string;
+  client: string;
+  status: ShipmentStatus;
+  date?: string;
+  carrier?: string;
+  lines: PackingShipmentLine[];
+  waveId?: string;
+}
+
 export type MovementType = "MANUAL" | "RESLOTTING" | "REPLENISHMENT";
 
 export interface Movement {
