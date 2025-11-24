@@ -15,5 +15,27 @@ export function usePermissions() {
   const canReadWmsConfig = useMemo(() => hasPermission("CONFIG_WMS_READ") || hasRole("ADMIN"), []);
   const canWriteWmsConfig = useMemo(() => hasPermission("CONFIG_WMS_WRITE") || hasRole("ADMIN"), []);
 
-  return { canRead, canWrite, canManage, canAccessSaaS, canReadWmsConfig, canWriteWmsConfig };
+  const canInboundRead = useMemo(() => hasPermission("INBOUND_READ"), []);
+  const canInboundExecute = useMemo(() => hasPermission("INBOUND_EXECUTE"), []);
+  const canInventoryRead = useMemo(() => hasPermission("INVENTORY_READ"), []);
+  const canMovementsWrite = useMemo(() => hasPermission("MOVEMENTS_WRITE"), []);
+  const canAdjustmentsWrite = useMemo(() => hasPermission("ADJUSTMENT_WRITE"), []);
+  const canCycleCountCreate = useMemo(() => hasPermission("CYCLECOUNT_CREATE"), []);
+  const canCycleCountExecute = useMemo(() => hasPermission("CYCLECOUNT_EXECUTE"), []);
+
+  return {
+    canRead,
+    canWrite,
+    canManage,
+    canAccessSaaS,
+    canReadWmsConfig,
+    canWriteWmsConfig,
+    canInboundRead,
+    canInboundExecute,
+    canInventoryRead,
+    canMovementsWrite,
+    canAdjustmentsWrite,
+    canCycleCountCreate,
+    canCycleCountExecute
+  };
 }

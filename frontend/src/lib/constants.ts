@@ -9,7 +9,9 @@ export const AUTH_REFRESH_COOKIE = "awms_refresh_token";
 export const APP_SECTIONS = [
   { label: "Dashboard", href: "/dashboard", icon: "layout-dashboard" },
   { label: "Inbound", href: "/inbound", icon: "truck" },
-  { label: "Outbound", href: "/outbound", icon: "package" },
   { label: "Inventario", href: "/inventory", icon: "boxes" },
+  { label: "Movimientos", href: "/movements", icon: "arrow-left-right" },
+  { label: "Ajustes", href: "/adjustments", icon: "scales" },
+  { label: "Cycle Count", href: "/cycle-count", icon: "clipboard-list" },
   { label: "Configuración", href: "/settings", icon: "settings" }
 ];
