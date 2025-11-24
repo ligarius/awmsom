@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { AUTH_TOKEN_COOKIE } from "@/lib/constants";
+import type { AuthUser } from "@/types/auth";
 
 const protectedRoutes = ["/dashboard", "/inbound", "/outbound", "/inventory", "/settings", "/saas", "/onboarding"];
 
@@ -9,35 +10,41 @@ const routePermissions: { prefix: string; permission?: string; role?: string }[]
   { prefix: "/settings/roles", permission: "roles:manage" }
 ];
 
-function decodeToken(token: string): { role?: string; permissions?: string[] } {
-  const segments = token.split(".");
+const validationCache = new Map<string, { user: AuthUser | null; expiresAt: number }>();
+const CACHE_TTL_MS = 5_000;
 
-  if (segments.length !== 3) {
-    return {};
+async function validateSession(request: NextRequest, token: string): Promise<AuthUser | null> {
+  const cached = validationCache.get(token);
+  const now = Date.now();
+
+  if (cached && cached.expiresAt > now) {
+    return cached.user;
   }
 
+  const validationUrl = new URL("/api/auth/me", request.nextUrl.origin);
+  const cookieHeader = request.headers.get("cookie") ?? "";
+
   try {
-    const payload = segments[1]
-      .replace(/-/g, "+")
-      .replace(/_/g, "/")
-      .padEnd(Math.ceil(segments[1].length / 4) * 4, "=");
+    const response = await fetch(validationUrl, {
+      headers: { cookie: cookieHeader },
+      cache: "no-store"
+    });
 
-    const binaryPayload = atob(payload);
-    const bytes = Uint8Array.from(binaryPayload, (char) => char.charCodeAt(0));
-    const decoded = JSON.parse(new TextDecoder().decode(bytes));
+    if (!response.ok) {
+      validationCache.set(token, { user: null, expiresAt: now + CACHE_TTL_MS });
+      return null;
+    }
 
-    const role = typeof decoded.role === "string" ? decoded.role : undefined;
-    const permissions = Array.isArray(decoded.permissions)
-      ? decoded.permissions.filter((permission) => typeof permission === "string")
-      : undefined;
-
-    return { role, permissions };
+    const { user } = (await response.json()) as { user: AuthUser | null };
+    validationCache.set(token, { user, expiresAt: now + CACHE_TTL_MS });
+    return user;
   } catch (error) {
-    return {};
+    validationCache.set(token, { user: null, expiresAt: now + CACHE_TTL_MS });
+    return null;
   }
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const token = request.cookies.get(AUTH_TOKEN_COOKIE)?.value;
   const isProtected = protectedRoutes.some((path) => request.nextUrl.pathname.startsWith(path));
 
@@ -46,20 +53,28 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (token && isProtected) {
-    const { role, permissions } = decodeToken(token);
+  const isLogin = request.nextUrl.pathname === "/login";
+
+  if (token && (isProtected || isLogin)) {
+    const user = await validateSession(request, token);
+
+    if (!user) {
+      const loginUrl = new URL("/login", request.url);
+      return NextResponse.redirect(loginUrl);
+    }
+
     const rule = routePermissions.find((rule) => request.nextUrl.pathname.startsWith(rule.prefix));
     if (rule) {
-      const hasRole = rule.role ? role === rule.role : true;
-      const hasPermission = rule.permission ? permissions?.includes(rule.permission) : true;
+      const hasRole = rule.role ? user.role === rule.role : true;
+      const hasPermission = rule.permission ? user.permissions?.includes(rule.permission) : true;
       if (!hasRole || !hasPermission) {
         return NextResponse.redirect(new URL("/forbidden", request.url));
       }
     }
-  }
 
-  if (request.nextUrl.pathname === "/login" && token) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    if (isLogin) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
   }
 
   return NextResponse.next();
