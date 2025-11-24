@@ -106,18 +106,33 @@ describe('Auth module', () => {
   let userAccountService: UserAccountService;
   const providerSecret = 'provider-secret';
   const providerAudience = 'awmsom-audience';
+  const strongJwtSecret = 'averysecurejwtsecretwithmorethan32characters!!';
 
   beforeEach(() => {
+    process.env.JWT_SECRET = strongJwtSecret;
     prisma = new MockPrismaService();
     userAccountService = new UserAccountService(prisma as any);
-    authService = new AuthService(prisma as any, undefined as any, userAccountService as any);
     process.env.OAUTH_OIDC_DEMO_SECRET = providerSecret;
     process.env.OAUTH_OIDC_DEMO_AUDIENCE = providerAudience;
     process.env.TOTP_ENCRYPTION_KEY = '12345678901234567890123456789012';
+    authService = new AuthService(prisma as any, undefined as any, userAccountService as any);
   });
 
   afterEach(() => {
+    delete process.env.JWT_SECRET;
     delete process.env.TOTP_ENCRYPTION_KEY;
+  });
+
+  it('requires a configured and strong JWT secret', () => {
+    delete process.env.JWT_SECRET;
+    expect(() => new AuthService(prisma as any, undefined as any, userAccountService as any)).toThrow(
+      'JWT secret is not configured',
+    );
+
+    process.env.JWT_SECRET = 'too-short-secret';
+    expect(() => new AuthService(prisma as any, undefined as any, userAccountService as any)).toThrow(
+      'JWT secret must be at least 32 characters long',
+    );
   });
 
   it('registers users with hashed passwords and prevents duplicates per tenant', async () => {
@@ -162,7 +177,7 @@ describe('Auth module', () => {
       password: 'secret123',
       tenantId: tenant.id,
     })) as any;
-    const decoded = jwt.verify(result.access_token, 'defaultSecret') as any;
+    const decoded = jwt.verify(result.access_token, strongJwtSecret) as any;
 
     expect(decoded.tenantId).toBe(tenant.id);
     expect(result.payload.tenantId).toBe(tenant.id);
