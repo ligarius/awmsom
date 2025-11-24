@@ -34,6 +34,7 @@ import { QueuesModule } from './infrastructure/queues/queues.module';
 import { SnapshotsModule } from './modules/snapshots/snapshots.module';
 import { SchedulerModule } from './modules/scheduler/scheduler.module';
 import { ReplenishmentModule } from './modules/replenishment/replenishment.module';
+import { SlottingModule } from './modules/slotting/slotting.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { ReplenishmentModule } from './modules/replenishment/replenishment.modul
     SnapshotsModule,
     SchedulerModule,
     ReplenishmentModule,
+    SlottingModule,
   ],
   providers: [
     RateLimitService,

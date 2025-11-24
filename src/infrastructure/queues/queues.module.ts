@@ -9,6 +9,7 @@ const queueNames = [
   'integration-jobs-queue',
   'maintenance-queue',
   'replenishment-queue',
+  'slotting-queue',
 ];
 
 @Module({

@@ -10,6 +10,7 @@ export class QueuesService {
     @InjectQueue('integration-jobs-queue') private readonly integrationJobsQueue: Queue,
     @InjectQueue('maintenance-queue') private readonly maintenanceQueue: Queue,
     @InjectQueue('replenishment-queue') private readonly replenishmentQueue: Queue,
+    @InjectQueue('slotting-queue') private readonly slottingQueue: Queue,
   ) {}
 
   enqueueKpiSnapshotJob(tenantId: string, payload: any) {
@@ -30,5 +31,9 @@ export class QueuesService {
 
   enqueueReplenishmentJob(tenantId: string, payload: any = {}) {
     return this.replenishmentQueue.add('evaluate', { tenantId, ...payload });
+  }
+
+  enqueueSlottingJob(tenantId: string, payload: any = {}) {
+    return this.slottingQueue.add('calculate', { tenantId, ...payload });
   }
 }
