@@ -42,6 +42,20 @@ export enum ShipmentStatus {
   CANCELLED = 'CANCELLED',
 }
 
+export enum IntegrationType {
+  ERP = 'ERP',
+  ECOMMERCE = 'ECOMMERCE',
+  TMS = 'TMS',
+  OTHER = 'OTHER',
+}
+
+export enum IntegrationJobStatus {
+  PENDING = 'PENDING',
+  RUNNING = 'RUNNING',
+  SUCCESS = 'SUCCESS',
+  FAILED = 'FAILED',
+}
+
 export enum MovementStatus {
   PENDING = 'PENDING',
   COMPLETED = 'COMPLETED',
