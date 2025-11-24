@@ -29,10 +29,8 @@ export function WaveOrderSelector({ orders, selectedIds, onChange }: WaveOrderSe
             <div className="flex items-center gap-3">
               <Checkbox checked={selectedIds.includes(order.id)} onCheckedChange={() => toggle(order.id)} />
               <div>
-                <p className="font-semibold leading-tight">{order.code}</p>
-                <p className="text-xs text-muted-foreground">
-                  Cliente {order.client} • {order.lines.length} líneas
-                </p>
+                <p className="font-semibold leading-tight">{order.externalRef ?? order.customerRef ?? order.id}</p>
+                <p className="text-xs text-muted-foreground">Cliente {order.customerRef ?? "-"} • {order.lines.length} líneas</p>
               </div>
             </div>
             <OutboundStatusBadge status={order.status} />

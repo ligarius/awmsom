@@ -12,7 +12,7 @@ import { toast } from "@/components/ui/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
 
 interface OrderLineForm {
-  sku: string;
+  productId: string;
   quantity: number;
   uom: string;
 }
@@ -21,10 +21,11 @@ export default function OutboundCreatePage() {
   const router = useRouter();
   const { canOutboundCreate, canOutboundRead } = usePermissions();
   const { post } = useApi();
-  const [client, setClient] = useState("");
-  const [commitmentDate, setCommitmentDate] = useState("");
+  const [externalRef, setExternalRef] = useState("");
+  const [customerRef, setCustomerRef] = useState("");
+  const [requestedShipDate, setRequestedShipDate] = useState("");
   const [warehouse, setWarehouse] = useState("");
-  const [lines, setLines] = useState<OrderLineForm[]>([{ sku: "", quantity: 1, uom: "UN" }]);
+  const [lines, setLines] = useState<OrderLineForm[]>([{ productId: "", quantity: 1, uom: "UN" }]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -33,20 +34,27 @@ export default function OutboundCreatePage() {
     }
   }, [canOutboundCreate, canOutboundRead, router]);
 
-  const addLine = () => setLines((prev) => [...prev, { sku: "", quantity: 1, uom: "UN" }]);
+  const addLine = () => setLines((prev) => [...prev, { productId: "", quantity: 1, uom: "UN" }]);
   const updateLine = (index: number, key: keyof OrderLineForm, value: string | number) => {
     setLines((prev) => prev.map((line, idx) => (idx === index ? { ...line, [key]: value } : line)));
   };
   const removeLine = (index: number) => setLines((prev) => prev.filter((_, idx) => idx !== index));
+  const isFormInvalid =
+    !warehouse || lines.some((line) => !line.productId || !line.quantity || !line.uom || Number(line.quantity) <= 0);
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      await post("/outbound", {
-        client,
-        commitmentDate,
+      await post("/outbound/orders", {
         warehouseId: warehouse,
-        lines: lines.map((line) => ({ sku: line.sku, quantity: Number(line.quantity), uom: line.uom }))
+        externalRef: externalRef || undefined,
+        customerRef: customerRef || undefined,
+        requestedShipDate: requestedShipDate || undefined,
+        lines: lines.map((line) => ({
+          productId: line.productId,
+          requestedQty: Number(line.quantity),
+          uom: line.uom
+        }))
       });
       toast({ title: "Orden creada" });
       router.push("/outbound");
@@ -64,7 +72,7 @@ export default function OutboundCreatePage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Crear orden outbound</h1>
-          <p className="text-sm text-muted-foreground">Define cliente, fecha compromiso y líneas a despachar.</p>
+          <p className="text-sm text-muted-foreground">Define referencias, fecha compromiso y líneas a despachar.</p>
         </div>
       </div>
 
@@ -75,12 +83,16 @@ export default function OutboundCreatePage() {
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-3">
           <div>
-            <Label>Cliente</Label>
-            <Input value={client} onChange={(e) => setClient(e.target.value)} placeholder="Cliente" />
+            <Label>Referencia externa</Label>
+            <Input value={externalRef} onChange={(e) => setExternalRef(e.target.value)} placeholder="Externo" />
+          </div>
+          <div>
+            <Label>Referencia cliente</Label>
+            <Input value={customerRef} onChange={(e) => setCustomerRef(e.target.value)} placeholder="Cliente" />
           </div>
           <div>
             <Label>Fecha compromiso</Label>
-            <Input type="date" value={commitmentDate} onChange={(e) => setCommitmentDate(e.target.value)} />
+            <Input type="date" value={requestedShipDate} onChange={(e) => setRequestedShipDate(e.target.value)} />
           </div>
           <div>
             <Label>Bodega</Label>
@@ -93,7 +105,7 @@ export default function OutboundCreatePage() {
         <CardHeader className="flex-row items-center justify-between">
           <div>
             <CardTitle>Líneas de producto</CardTitle>
-            <CardDescription>Define SKU, cantidad y unidad de medida.</CardDescription>
+            <CardDescription>Define producto, cantidad y unidad de medida.</CardDescription>
           </div>
           <Button variant="outline" onClick={addLine} size="sm">
             Agregar línea
@@ -103,8 +115,12 @@ export default function OutboundCreatePage() {
           {lines.map((line, index) => (
             <div key={index} className="grid gap-3 rounded-lg border p-3 md:grid-cols-4">
               <div className="md:col-span-2">
-                <Label>SKU</Label>
-                <Input value={line.sku} onChange={(e) => updateLine(index, "sku", e.target.value)} placeholder="SKU" />
+                <Label>ID de producto</Label>
+                <Input
+                  value={line.productId}
+                  onChange={(e) => updateLine(index, "productId", e.target.value)}
+                  placeholder="Producto"
+                />
               </div>
               <div>
                 <Label>Cantidad</Label>
@@ -133,7 +149,7 @@ export default function OutboundCreatePage() {
 
       <div className="mt-6 flex justify-end gap-2">
         <Button variant="outline" onClick={() => router.push("/outbound")}>Cancelar</Button>
-        <Button onClick={handleSubmit} disabled={isSubmitting || !client || !warehouse}>
+        <Button onClick={handleSubmit} disabled={isSubmitting || isFormInvalid}>
           {isSubmitting ? "Creando..." : "Crear orden"}
         </Button>
       </div>
