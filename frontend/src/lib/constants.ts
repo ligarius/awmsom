@@ -18,5 +18,6 @@ export const APP_SECTIONS = [
   { label: "Movimientos", href: "/movements", icon: "arrow-left-right" },
   { label: "Ajustes", href: "/adjustments", icon: "scales" },
   { label: "Cycle Count", href: "/cycle-count", icon: "clipboard-list" },
+  { label: "Slotting", href: "/slotting", icon: "grid" },
   { label: "Configuración", href: "/settings", icon: "settings" }
 ];
