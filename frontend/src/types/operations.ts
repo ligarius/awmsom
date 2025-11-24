@@ -185,7 +185,7 @@ export interface ShipmentHandlingUnit {
   outboundOrder?: { id: string; code?: string; client?: string };
 }
 
-export type ShipmentStatus = "PLANNED" | "LOADING" | "DISPATCHED" | "CANCELLED";
+export type ShipmentStatus = "PLANNED" | "LOADING" | "DISPATCHED";
 
 export interface Shipment {
   id: string;
