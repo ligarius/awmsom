@@ -25,5 +25,13 @@ export function useApi() {
     []
   );
 
-  return { get, post };
+  const patch = useCallback(
+    async <T>(url: string, body?: unknown) => {
+      const { data } = await api.patch<T>(url, body);
+      return data;
+    },
+    []
+  );
+
+  return { get, post, patch };
 }
