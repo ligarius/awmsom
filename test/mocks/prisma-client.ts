@@ -116,6 +116,22 @@ export enum PickingMethodType {
   ZONE = 'ZONE',
 }
 
+export enum WavePickingStrategy {
+  BY_ROUTE = 'BY_ROUTE',
+  BY_CARRIER = 'BY_CARRIER',
+  BY_ZONE = 'BY_ZONE',
+  BY_TIMEWINDOW = 'BY_TIMEWINDOW',
+  BY_PRIORITY = 'BY_PRIORITY',
+}
+
+export enum WaveStatus {
+  CREATED = 'CREATED',
+  RELEASED = 'RELEASED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+}
+
 export enum PermissionResource {
   CONFIG = 'CONFIG',
   INVENTORY = 'INVENTORY',

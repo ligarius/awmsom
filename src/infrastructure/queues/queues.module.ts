@@ -10,6 +10,7 @@ const queueNames = [
   'maintenance-queue',
   'replenishment-queue',
   'slotting-queue',
+  'waves-queue',
 ];
 
 @Module({

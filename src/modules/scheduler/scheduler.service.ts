@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { KpiType } from '@prisma/client';
+import { KpiType, WavePickingStrategy } from '@prisma/client';
 import { QueuesService } from '../../infrastructure/queues/queues.service';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -78,5 +78,20 @@ export class SchedulerService {
     const tenants = await this.prisma.tenant.findMany({ where: { isActive: true } });
     await Promise.all(tenants.map((tenant) => this.queues.enqueueSlottingJob(tenant.id, {})));
     this.logger.log(`Scheduled slotting for ${tenants.length} tenants`);
+  }
+
+  @Cron('*/30 * * * *')
+  async enqueueWaveGeneration() {
+    const tenants = await this.prisma.tenant.findMany({ where: { isActive: true } });
+    for (const tenant of tenants) {
+      const warehouses = await this.prisma.warehouse.findMany({ where: { tenantId: tenant.id, isActive: true } });
+      for (const warehouse of warehouses) {
+        await this.queues.enqueueWaveGenerationJob(tenant.id, {
+          warehouseId: warehouse.id,
+          strategy: WavePickingStrategy.BY_TIMEWINDOW,
+        });
+      }
+    }
+    this.logger.log(`Scheduled wave generation for ${tenants.length} tenants`);
   }
 }
