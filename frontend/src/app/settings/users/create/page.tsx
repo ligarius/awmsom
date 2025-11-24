@@ -15,11 +15,20 @@ export default function CreateUserPage() {
   const router = useRouter();
   const { post } = useApi();
   const [form, setForm] = useState({ fullName: "", email: "", password: "", role: "USER" });
+  const [loading, setLoading] = useState(false);
 
   const onSubmit = async () => {
-    await post("/users", form);
-    toast({ title: "Usuario creado" });
-    router.push("/settings/users");
+    setLoading(true);
+    try {
+      await post("/users", form);
+      toast({ title: "Usuario creado" });
+      router.push("/settings/users");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No pudimos crear el usuario";
+      toast({ title: "Error al crear el usuario", description: message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -61,7 +70,9 @@ export default function CreateUserPage() {
             <Button variant="outline" onClick={() => router.back()}>
               Cancelar
             </Button>
-            <Button onClick={onSubmit}>Crear usuario</Button>
+            <Button onClick={onSubmit} disabled={loading}>
+              Crear usuario
+            </Button>
           </div>
         </CardFooter>
       </Card>
