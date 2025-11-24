@@ -12,7 +12,6 @@ import { DataTable } from "@/components/data/DataTable";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useApi } from "@/hooks/useApi";
 import { toast } from "@/components/ui/use-toast";
-import type { PaginatedResult } from "@/types/common";
 import type { Shipment } from "@/types/operations";
 
 export default function ShipmentsPage() {
@@ -27,12 +26,12 @@ export default function ShipmentsPage() {
 
   const shipmentsQuery = useQuery({
     queryKey: ["shipments"],
-    queryFn: () => get<PaginatedResult<Shipment>>("/shipments"),
+    queryFn: () => get<Shipment[]>("/outbound/shipments"),
     enabled: canShipmentsRead
   });
 
   const shipMutation = useMutation({
-    mutationFn: (id: string) => post(`/shipments/${id}/ship`),
+    mutationFn: (id: string) => post(`/outbound/shipments/${id}/dispatch`, {}),
     onSuccess: () => {
       toast({ title: "Shipment despachado" });
       queryClient.invalidateQueries({ queryKey: ["shipments"] });
@@ -42,11 +41,14 @@ export default function ShipmentsPage() {
 
   const columns: ColumnDef<Shipment>[] = useMemo(
     () => [
-      { accessorKey: "code", header: "Código" },
-      { accessorKey: "client", header: "Cliente" },
+      { accessorKey: "id", header: "ID" },
+      { accessorKey: "carrierRef", header: "Carrier" },
       { accessorKey: "status", header: "Estado" },
-      { accessorKey: "date", header: "Fecha" },
-      { accessorKey: "carrier", header: "Transportista" },
+      { accessorKey: "scheduledDeparture", header: "Fecha" },
+      {
+        header: "Handling units",
+        cell: ({ row }) => row.original.shipmentHandlingUnits?.length ?? 0
+      },
       {
         id: "actions",
         header: "Acciones",
@@ -55,7 +57,7 @@ export default function ShipmentsPage() {
             <Button size="sm" variant="ghost" asChild>
               <Link href={`/shipments/${row.original.id}`}>Ver</Link>
             </Button>
-            {canShipmentsExecute && row.original.status !== "SHIPPED" && (
+            {canShipmentsExecute && row.original.status !== "DISPATCHED" && (
               <Button size="sm" variant="outline" onClick={() => shipMutation.mutate(row.original.id)}>
                 Confirmar despacho
               </Button>
@@ -81,10 +83,18 @@ export default function ShipmentsPage() {
       <Card className="mt-4">
         <CardHeader>
           <CardTitle>Shipments</CardTitle>
-          <CardDescription>Estado de packing y despacho.</CardDescription>
+          <CardDescription>Estado de carga y despacho de handling units.</CardDescription>
         </CardHeader>
         <CardContent>
-          <DataTable columns={columns} data={shipmentsQuery.data ?? { items: [], page: 1, pageSize: 20, total: 0 }} />
+          <DataTable
+            columns={columns}
+            data={{
+              items: shipmentsQuery.data ?? [],
+              page: 1,
+              pageSize: shipmentsQuery.data?.length ?? 0 || 10,
+              total: shipmentsQuery.data?.length ?? 0
+            }}
+          />
         </CardContent>
       </Card>
     </AppShell>

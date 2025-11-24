@@ -11,33 +11,49 @@ import { Label } from "@/components/ui/label";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useApi } from "@/hooks/useApi";
 import { toast } from "@/components/ui/use-toast";
-import type { PackingShipment } from "@/types/operations";
+import type { HandlingUnit } from "@/types/operations";
 import { PackingSummary } from "@/components/operations/PackingSummary";
 
 export default function PackingDetailPage() {
-  const { shipmentId } = useParams<{ shipmentId: string }>();
+  const { shipmentId: handlingUnitId } = useParams<{ shipmentId: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { canPackingExecute } = usePermissions();
   const { get, post } = useApi();
-  const [hu, setHu] = useState("");
+  const [outboundOrderId, setOutboundOrderId] = useState("");
 
   useEffect(() => {
     if (!canPackingExecute) router.replace("/forbidden");
   }, [canPackingExecute, router]);
 
-  const shipmentQuery = useQuery({
-    queryKey: ["packing", shipmentId],
-    queryFn: () => get<PackingShipment>(`/packing/${shipmentId}`),
-    enabled: canPackingExecute
+  const handlingUnitQuery = useQuery({
+    queryKey: ["handling-units", handlingUnitId],
+    queryFn: () => get<HandlingUnit>(`/outbound/handling-units/${handlingUnitId}`),
+    enabled: canPackingExecute,
+    onSuccess: (data) => {
+      if (data.lines.length && !outboundOrderId) {
+        setOutboundOrderId(data.lines[0].outboundOrderId);
+      }
+    }
   });
 
   const completeMutation = useMutation({
-    mutationFn: () => post(`/packing/${shipmentId}/complete`, { handlingUnit: hu }),
+    mutationFn: () =>
+      post(`/outbound/handling-units/${handlingUnitId}/items`, {
+        outboundOrderId,
+        items:
+          handlingUnitQuery.data?.lines.map((line) => ({
+            outboundOrderLineId: line.outboundOrderLineId,
+            productId: line.productId,
+            batchId: line.batchId ?? undefined,
+            quantity: line.quantity,
+            uom: line.uom,
+          })) ?? []
+      }),
     onSuccess: () => {
       toast({ title: "Packing completado" });
-      queryClient.invalidateQueries({ queryKey: ["packing"] });
-      router.push("/shipments");
+      queryClient.invalidateQueries({ queryKey: ["handling-units"] });
+      router.push("/packing");
     },
     onError: () => toast({ title: "No pudimos cerrar el packing", variant: "destructive" })
   });
@@ -46,12 +62,12 @@ export default function PackingDetailPage() {
 
   return (
     <AppShell>
-      {shipmentQuery.data && (
+      {handlingUnitQuery.data && (
         <>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-semibold">Packing {shipmentQuery.data.code ?? shipmentQuery.data.id}</h1>
-              <p className="text-sm text-muted-foreground">Cliente {shipmentQuery.data.client}</p>
+              <h1 className="text-2xl font-semibold">Packing {handlingUnitQuery.data.code}</h1>
+              <p className="text-sm text-muted-foreground">Handling unit {handlingUnitQuery.data.handlingUnitType}</p>
             </div>
             <Button variant="outline" onClick={() => router.back()}>
               Volver
@@ -60,19 +76,27 @@ export default function PackingDetailPage() {
 
           <div className="mt-4 grid gap-4 md:grid-cols-3">
             <div className="md:col-span-2">
-              <PackingSummary lines={shipmentQuery.data.lines} />
+              <PackingSummary lines={handlingUnitQuery.data.lines} />
             </div>
             <Card>
               <CardHeader>
                 <CardTitle>Validación</CardTitle>
-                <CardDescription>Registra HU/caja y confirma.</CardDescription>
+                <CardDescription>Confirma el registro de ítems en la HU.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div>
-                  <Label>HU / Caja</Label>
-                  <Input value={hu} onChange={(e) => setHu(e.target.value)} placeholder="Escanea o escribe" />
+                  <Label>Orden outbound</Label>
+                  <Input
+                    value={outboundOrderId}
+                    onChange={(e) => setOutboundOrderId(e.target.value)}
+                    placeholder="Selecciona o escribe el outbound"
+                  />
                 </div>
-                <Button className="w-full" disabled={completeMutation.isLoading} onClick={() => completeMutation.mutate()}>
+                <Button
+                  className="w-full"
+                  disabled={completeMutation.isLoading || !outboundOrderId || !handlingUnitQuery.data?.lines.length}
+                  onClick={() => completeMutation.mutate()}
+                >
                   {completeMutation.isLoading ? "Confirmando..." : "Confirmar packing"}
                 </Button>
                 <p className="text-xs text-muted-foreground">Etiqueta: se generará automáticamente (placeholder).</p>
@@ -81,7 +105,7 @@ export default function PackingDetailPage() {
           </div>
         </>
       )}
-      {!shipmentQuery.data && shipmentQuery.isLoading && (
+      {!handlingUnitQuery.data && handlingUnitQuery.isLoading && (
         <Card>
           <CardHeader>
             <CardTitle>Cargando shipment</CardTitle>
