@@ -14,5 +14,7 @@ export interface AuthUser {
   email: string;
   fullName: string;
   tenant?: string;
+  tenantId?: string;
   role?: string;
+  permissions?: string[];
 }
