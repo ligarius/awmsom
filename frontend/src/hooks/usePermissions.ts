@@ -12,6 +12,8 @@ export function usePermissions() {
   const canWrite = useMemo(() => hasPermission("write"), []);
   const canManage = useMemo(() => hasPermission("manage") || hasRole("ADMIN"), []);
   const canAccessSaaS = useMemo(() => hasPermission("saas:access") || hasRole("SUPER_ADMIN"), []);
+  const canReadWmsConfig = useMemo(() => hasPermission("CONFIG_WMS_READ") || hasRole("ADMIN"), []);
+  const canWriteWmsConfig = useMemo(() => hasPermission("CONFIG_WMS_WRITE") || hasRole("ADMIN"), []);
 
-  return { canRead, canWrite, canManage, canAccessSaaS };
+  return { canRead, canWrite, canManage, canAccessSaaS, canReadWmsConfig, canWriteWmsConfig };
 }
