@@ -1,15 +1,83 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { collectDefaultMetrics, Counter, Histogram, Registry } from 'prom-client';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as yaml from 'js-yaml';
+
+type ServiceName = 'inventory' | 'outbound' | 'general';
+
+interface SloObjective {
+  id: ServiceName | string;
+  service: ServiceName;
+  endpointPrefix: string;
+  targetLatencyMs: number;
+  targetAvailability: number;
+  targetErrorRate: number;
+  description?: string;
+}
+
+interface AlertRule {
+  id: string;
+  slo: string;
+  severity: 'critical' | 'warning';
+  condition: string;
+  action: string;
+}
+
+interface SloWindowState {
+  total: number;
+  errors: number;
+  durations: number[];
+  available: number;
+  lastUpdated?: string;
+}
+
+interface SloStatus {
+  id: string;
+  service: ServiceName;
+  description?: string;
+  latencyP95: number;
+  availability: number;
+  errorRate: number;
+  healthy: boolean;
+  alerts: AlertRule[];
+  lastUpdated?: string;
+}
+
+interface ServiceSignal {
+  service: ServiceName;
+  level: 'info' | 'warning' | 'error';
+  message: string;
+  traceId?: string;
+  timestamp: string;
+}
+
+interface TraceSignal {
+  service: ServiceName;
+  span: string;
+  status: 'ok' | 'degraded' | 'failed';
+  durationMs?: number;
+  timestamp: string;
+}
 
 @Injectable()
 export class MonitoringService {
+  private readonly logger = new Logger(MonitoringService.name);
   private readonly register: Registry;
   private readonly requestCounter: Counter<'method' | 'path' | 'statusCode'>;
   private readonly durationHistogram: Histogram<'method' | 'path' | 'statusCode'>;
   private totalRequests = 0;
+  private readonly sloObjectives: SloObjective[];
+  private readonly alertRules: AlertRule[];
+  private readonly sloWindows: Record<string, SloWindowState> = {};
+  private readonly serviceSignals: ServiceSignal[] = [];
+  private readonly traceSignals: TraceSignal[] = [];
 
   constructor(private readonly auditService: AuditService) {
+    const { sloObjectives, alertRules } = this.loadAlertConfiguration();
+    this.sloObjectives = sloObjectives;
+    this.alertRules = alertRules;
     this.register = new Registry();
     collectDefaultMetrics({ register: this.register });
 
@@ -39,6 +107,12 @@ export class MonitoringService {
     this.requestCounter.inc(labels);
     this.durationHistogram.observe(labels, durationMs / 1000);
     this.totalRequests += 1;
+
+    const service = this.resolveServiceFromPath(path);
+    this.updateSloWindow(service, durationMs, statusCode);
+    if (statusCode >= 500) {
+      this.recordServiceLog(service, 'error', `Error ${statusCode} detected at ${path}`);
+    }
   }
 
   async getMetrics(): Promise<string> {
@@ -50,6 +124,7 @@ export class MonitoringService {
   }
 
   async getHealthSummary() {
+    const sloStatuses = this.getSloStatuses();
     return {
       status: 'ok',
       timestamp: new Date().toISOString(),
@@ -61,6 +136,217 @@ export class MonitoringService {
       metrics: {
         totalRequests: this.totalRequests,
       },
+      sloStatuses,
     };
+  }
+
+  getSloStatuses(): SloStatus[] {
+    return this.sloObjectives.map((slo) => {
+      const state = this.sloWindows[slo.id] ?? {
+        total: 0,
+        errors: 0,
+        durations: [],
+        available: 0,
+      };
+      const latencyP95 = this.calculateP95(state.durations);
+      const errorRate = state.total === 0 ? 0 : state.errors / state.total;
+      const availability = state.total === 0 ? 1 : state.available / state.total;
+      const healthy =
+        latencyP95 <= slo.targetLatencyMs &&
+        errorRate <= slo.targetErrorRate &&
+        availability >= slo.targetAvailability;
+      const activeAlerts = healthy
+        ? []
+        : this.alertRules.filter((rule) => rule.slo === slo.id);
+
+      return {
+        id: slo.id,
+        service: slo.service,
+        description: slo.description,
+        latencyP95,
+        availability,
+        errorRate,
+        healthy,
+        alerts: activeAlerts,
+        lastUpdated: state.lastUpdated,
+      };
+    });
+  }
+
+  getAlertsOverview() {
+    const sloStatuses = this.getSloStatuses();
+    const active = sloStatuses
+      .filter((status) => !status.healthy)
+      .flatMap((status) => status.alerts.map((alert) => ({ ...alert, service: status.service })));
+
+    return {
+      active,
+      evaluatedAt: new Date().toISOString(),
+      totalActive: active.length,
+    };
+  }
+
+  recordServiceLog(service: ServiceName, level: 'info' | 'warning' | 'error', message: string, traceId?: string) {
+    const entry: ServiceSignal = {
+      service,
+      level,
+      message,
+      traceId,
+      timestamp: new Date().toISOString(),
+    };
+    this.serviceSignals.push(entry);
+    if (this.serviceSignals.length > 100) {
+      this.serviceSignals.shift();
+    }
+  }
+
+  recordTrace(service: ServiceName, span: string, status: 'ok' | 'degraded' | 'failed', durationMs?: number) {
+    const entry: TraceSignal = {
+      service,
+      span,
+      status,
+      durationMs,
+      timestamp: new Date().toISOString(),
+    };
+    this.traceSignals.push(entry);
+    if (this.traceSignals.length > 100) {
+      this.traceSignals.shift();
+    }
+    this.auditService.recordTrace(entry);
+  }
+
+  getSignals(filter?: { service?: ServiceName; level?: ServiceSignal['level'] }) {
+    const logs = this.serviceSignals.filter((signal) =>
+      (!filter?.service || signal.service === filter.service) && (!filter?.level || signal.level === filter.level),
+    );
+    const traces = this.traceSignals.filter((signal) => !filter?.service || signal.service === filter.service);
+
+    return {
+      logs,
+      traces,
+    };
+  }
+
+  private loadAlertConfiguration(): { sloObjectives: SloObjective[]; alertRules: AlertRule[] } {
+    const configPath = path.join(process.cwd(), 'configuration', 'alerts.yml');
+    try {
+      if (!fs.existsSync(configPath)) {
+        this.logger.warn(`Alert configuration not found at ${configPath}, using defaults.`);
+        return this.getDefaultAlerts();
+      }
+      const raw = fs.readFileSync(configPath, 'utf8');
+      const parsed = yaml.load(raw) as any;
+      return {
+        sloObjectives: parsed?.slo ?? this.getDefaultAlerts().sloObjectives,
+        alertRules: parsed?.alerts ?? this.getDefaultAlerts().alertRules,
+      };
+    } catch (error) {
+      this.logger.warn(`Failed to load alert config: ${String(error)}`);
+      return this.getDefaultAlerts();
+    }
+  }
+
+  private getDefaultAlerts(): { sloObjectives: SloObjective[]; alertRules: AlertRule[] } {
+    const sloObjectives: SloObjective[] = [
+      {
+        id: 'inventory',
+        service: 'inventory',
+        endpointPrefix: '/inventory',
+        targetLatencyMs: 500,
+        targetAvailability: 0.995,
+        targetErrorRate: 0.01,
+        description: 'Respuestas consistentes para operaciones de inventario.',
+      },
+      {
+        id: 'outbound',
+        service: 'outbound',
+        endpointPrefix: '/outbound',
+        targetLatencyMs: 750,
+        targetAvailability: 0.995,
+        targetErrorRate: 0.01,
+        description: 'Flujo de fulfillment y despacho.',
+      },
+    ];
+
+    const alertRules: AlertRule[] = [
+      {
+        id: 'inventory-latency',
+        slo: 'inventory',
+        severity: 'critical',
+        condition: 'latency_p95 > targetLatencyMs for 5m',
+        action: 'Escalar al on-call y aislar warehouse afectado.',
+      },
+      {
+        id: 'inventory-error-rate',
+        slo: 'inventory',
+        severity: 'warning',
+        condition: 'error_rate > targetErrorRate for 3m',
+        action: 'Activar reintentos con backoff y revisar dependencias.',
+      },
+      {
+        id: 'outbound-latency',
+        slo: 'outbound',
+        severity: 'critical',
+        condition: 'latency_p95 > targetLatencyMs for 5m',
+        action: 'Priorizar tareas de picking/packing críticas y pausar no urgentes.',
+      },
+      {
+        id: 'outbound-error-rate',
+        slo: 'outbound',
+        severity: 'warning',
+        condition: 'error_rate > targetErrorRate for 3m',
+        action: 'Validar colas de despacho y capacidad de carriers.',
+      },
+    ];
+
+    return { sloObjectives, alertRules };
+  }
+
+  private resolveServiceFromPath(pathname: string): ServiceName {
+    if (pathname.startsWith('/inventory')) {
+      return 'inventory';
+    }
+    if (pathname.startsWith('/outbound')) {
+      return 'outbound';
+    }
+    return 'general';
+  }
+
+  private updateSloWindow(service: ServiceName, durationMs: number, statusCode: number) {
+    const slo = this.sloObjectives.find((candidate) => candidate.service === service);
+    if (!slo) {
+      return;
+    }
+    const window =
+      this.sloWindows[slo.id] ?? {
+        total: 0,
+        errors: 0,
+        durations: [],
+        available: 0,
+      };
+
+    window.total += 1;
+    window.durations.push(durationMs);
+    if (window.durations.length > 200) {
+      window.durations.shift();
+    }
+
+    if (statusCode >= 500) {
+      window.errors += 1;
+    }
+    if (statusCode < 500) {
+      window.available += 1;
+    }
+    window.lastUpdated = new Date().toISOString();
+    this.sloWindows[slo.id] = window;
+  }
+
+  private calculateP95(values: number[]): number {
+    if (!values.length) {
+      return 0;
+    }
+    const sorted = [...values].sort((a, b) => a - b);
+    const index = Math.ceil(0.95 * sorted.length) - 1;
+    return sorted[index];
   }
 }

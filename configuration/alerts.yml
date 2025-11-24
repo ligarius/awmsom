@@ -1,0 +1,38 @@
+version: 1
+window: 60m
+slo:
+  - id: inventory
+    service: inventory
+    endpointPrefix: /inventory
+    targetLatencyMs: 500
+    targetAvailability: 0.995
+    targetErrorRate: 0.01
+    description: Respuestas consistentes para operaciones de inventario.
+  - id: outbound
+    service: outbound
+    endpointPrefix: /outbound
+    targetLatencyMs: 750
+    targetAvailability: 0.995
+    targetErrorRate: 0.01
+    description: Flujo de fulfillment y despacho.
+alerts:
+  - id: inventory-latency
+    slo: inventory
+    severity: critical
+    condition: "latency_p95 > targetLatencyMs for 5m"
+    action: Escalar al on-call y aislar warehouse afectado.
+  - id: inventory-error-rate
+    slo: inventory
+    severity: warning
+    condition: "error_rate > targetErrorRate for 3m"
+    action: Activar reintentos con backoff y revisar dependencias.
+  - id: outbound-latency
+    slo: outbound
+    severity: critical
+    condition: "latency_p95 > targetLatencyMs for 5m"
+    action: Priorizar tareas de picking/packing críticas y pausar no urgentes.
+  - id: outbound-error-rate
+    slo: outbound
+    severity: warning
+    condition: "error_rate > targetErrorRate for 3m"
+    action: Validar colas de despacho y capacidad de carriers.
