@@ -147,34 +147,56 @@ export interface PickingPathPlan {
   stops: PickingPathStop[];
 }
 
-export interface PackingShipmentLine {
-  productSku: string;
-  productName?: string;
-  quantity: number;
-  packedQuantity?: number;
-  uom?: string;
-}
+export type HandlingUnitType = "BOX" | "PALLET" | "PARCEL" | "CONTAINER" | "OTHER";
 
-export interface PackingShipment {
+export interface HandlingUnitLine {
   id: string;
-  code?: string;
-  client: string;
-  waveId?: string;
-  lines: PackingShipmentLine[];
-  status?: string;
+  outboundOrderId: string;
+  outboundOrderLineId: string;
+  productId: string;
+  productSku?: string;
+  productName?: string;
+  batchId?: string | null;
+  quantity: number;
+  uom: string;
 }
 
-export type ShipmentStatus = "CREATED" | "PACKED" | "SHIPPED";
+export interface HandlingUnit {
+  id: string;
+  code: string;
+  warehouseId: string;
+  handlingUnitType: HandlingUnitType;
+  externalLabel?: string | null;
+  grossWeight?: number | null;
+  volume?: number | null;
+  length?: number | null;
+  width?: number | null;
+  height?: number | null;
+  createdAt?: string;
+  lines: HandlingUnitLine[];
+}
+
+export interface ShipmentHandlingUnit {
+  id: string;
+  shipmentId: string;
+  handlingUnitId: string;
+  outboundOrderId: string;
+  handlingUnit?: HandlingUnit;
+  outboundOrder?: { id: string; code?: string; client?: string };
+}
+
+export type ShipmentStatus = "PLANNED" | "LOADING" | "DISPATCHED" | "CANCELLED";
 
 export interface Shipment {
   id: string;
-  code: string;
-  client: string;
+  warehouseId: string;
   status: ShipmentStatus;
-  date?: string;
-  carrier?: string;
-  lines: PackingShipmentLine[];
-  waveId?: string;
+  carrierRef?: string | null;
+  vehicleRef?: string | null;
+  routeRef?: string | null;
+  scheduledDeparture?: string | null;
+  actualDeparture?: string | null;
+  shipmentHandlingUnits?: ShipmentHandlingUnit[];
 }
 
 export type MovementType = "MANUAL" | "RESLOTTING" | "REPLENISHMENT";
