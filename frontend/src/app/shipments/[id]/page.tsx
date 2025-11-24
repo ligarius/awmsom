@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/layout/AppShell";
@@ -40,6 +40,15 @@ export default function ShipmentDetailPage() {
     onError: () => toast({ title: "No pudimos confirmar", variant: "destructive" })
   });
 
+  const canDispatch = useMemo(() => {
+    if (!shipmentQuery.data) return false;
+
+    const hasHandlingUnits = (shipmentQuery.data.shipmentHandlingUnits?.length ?? 0) > 0;
+    const isDispatchable = ["PLANNED", "LOADING"].includes(shipmentQuery.data.status);
+
+    return canShipmentsExecute && hasHandlingUnits && isDispatchable;
+  }, [canShipmentsExecute, shipmentQuery.data]);
+
   if (!canShipmentsRead) return null;
 
   return (
@@ -51,7 +60,7 @@ export default function ShipmentDetailPage() {
               <h1 className="text-2xl font-semibold">Shipment {shipmentQuery.data.id}</h1>
               <p className="text-sm text-muted-foreground">Estado {shipmentQuery.data.status}</p>
             </div>
-            {canShipmentsExecute && shipmentQuery.data.status !== "DISPATCHED" && (
+            {canDispatch && (
               <Button onClick={() => shipMutation.mutate()} disabled={shipMutation.isLoading}>
                 Confirmar despacho
               </Button>

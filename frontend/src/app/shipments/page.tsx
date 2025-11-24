@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -39,6 +39,13 @@ export default function ShipmentsPage() {
     onError: () => toast({ title: "No pudimos confirmar el despacho", variant: "destructive" })
   });
 
+  const canDispatchShipment = useCallback((shipment: Shipment) => {
+    const hasHandlingUnits = (shipment.shipmentHandlingUnits?.length ?? 0) > 0;
+    const isDispatchable = ["PLANNED", "LOADING"].includes(shipment.status);
+
+    return hasHandlingUnits && isDispatchable;
+  }, []);
+
   const columns: ColumnDef<Shipment>[] = useMemo(
     () => [
       { accessorKey: "id", header: "ID" },
@@ -57,8 +64,13 @@ export default function ShipmentsPage() {
             <Button size="sm" variant="ghost" asChild>
               <Link href={`/shipments/${row.original.id}`}>Ver</Link>
             </Button>
-            {canShipmentsExecute && row.original.status !== "DISPATCHED" && (
-              <Button size="sm" variant="outline" onClick={() => shipMutation.mutate(row.original.id)}>
+            {canShipmentsExecute && canDispatchShipment(row.original) && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => shipMutation.mutate(row.original.id)}
+                disabled={shipMutation.isLoading}
+              >
                 Confirmar despacho
               </Button>
             )}
@@ -66,7 +78,7 @@ export default function ShipmentsPage() {
         )
       }
     ],
-    [canShipmentsExecute, shipMutation]
+    [canShipmentsExecute, canDispatchShipment, shipMutation]
   );
 
   if (!canShipmentsRead) return null;
