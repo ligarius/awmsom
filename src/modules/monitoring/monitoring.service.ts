@@ -26,10 +26,7 @@ interface AlertRule {
 }
 
 interface SloWindowState {
-  total: number;
-  errors: number;
-  durations: number[];
-  available: number;
+  samples: SloSample[];
   lastUpdated?: string;
 }
 
@@ -61,6 +58,12 @@ interface TraceSignal {
   timestamp: string;
 }
 
+interface SloSample {
+  timestamp: number;
+  durationMs: number;
+  statusCode: number;
+}
+
 @Injectable()
 export class MonitoringService {
   private readonly logger = new Logger(MonitoringService.name);
@@ -73,11 +76,13 @@ export class MonitoringService {
   private readonly sloWindows: Record<string, SloWindowState> = {};
   private readonly serviceSignals: ServiceSignal[] = [];
   private readonly traceSignals: TraceSignal[] = [];
+  private readonly windowSizeMs: number;
 
   constructor(private readonly auditService: AuditService) {
-    const { sloObjectives, alertRules } = this.loadAlertConfiguration();
+    const { sloObjectives, alertRules, windowMs } = this.loadAlertConfiguration();
     this.sloObjectives = sloObjectives;
     this.alertRules = alertRules;
+    this.windowSizeMs = windowMs;
     this.register = new Registry();
     collectDefaultMetrics({ register: this.register });
 
@@ -141,16 +146,29 @@ export class MonitoringService {
   }
 
   getSloStatuses(): SloStatus[] {
+    const now = Date.now();
     return this.sloObjectives.map((slo) => {
       const state = this.sloWindows[slo.id] ?? {
-        total: 0,
-        errors: 0,
-        durations: [],
-        available: 0,
+        samples: [],
       };
-      const latencyP95 = this.calculateP95(state.durations);
-      const errorRate = state.total === 0 ? 0 : state.errors / state.total;
-      const availability = state.total === 0 ? 1 : state.available / state.total;
+      const samples = this.pruneWindow(state, now);
+      const aggregates = samples.reduce(
+        (acc, sample) => {
+          acc.total += 1;
+          if (sample.statusCode >= 500) {
+            acc.errors += 1;
+          } else {
+            acc.available += 1;
+          }
+          acc.durations.push(sample.durationMs);
+          return acc;
+        },
+        { total: 0, errors: 0, available: 0, durations: [] as number[] },
+      );
+
+      const latencyP95 = this.calculateP95(aggregates.durations);
+      const errorRate = aggregates.total === 0 ? 0 : aggregates.errors / aggregates.total;
+      const availability = aggregates.total === 0 ? 1 : aggregates.available / aggregates.total;
       const healthy =
         latencyP95 <= slo.targetLatencyMs &&
         errorRate <= slo.targetErrorRate &&
@@ -227,26 +245,28 @@ export class MonitoringService {
     };
   }
 
-  private loadAlertConfiguration(): { sloObjectives: SloObjective[]; alertRules: AlertRule[] } {
+  private loadAlertConfiguration(): { sloObjectives: SloObjective[]; alertRules: AlertRule[]; windowMs: number } {
     const configPath = path.join(process.cwd(), 'configuration', 'alerts.yml');
+    const defaults = this.getDefaultAlerts();
     try {
       if (!fs.existsSync(configPath)) {
         this.logger.warn(`Alert configuration not found at ${configPath}, using defaults.`);
-        return this.getDefaultAlerts();
+        return { ...defaults, windowMs: this.parseWindow(defaults.window) };
       }
       const raw = fs.readFileSync(configPath, 'utf8');
       const parsed = yaml.load(raw) as any;
       return {
-        sloObjectives: parsed?.slo ?? this.getDefaultAlerts().sloObjectives,
-        alertRules: parsed?.alerts ?? this.getDefaultAlerts().alertRules,
+        sloObjectives: parsed?.slo ?? defaults.sloObjectives,
+        alertRules: parsed?.alerts ?? defaults.alertRules,
+        windowMs: this.parseWindow(parsed?.window ?? defaults.window),
       };
     } catch (error) {
       this.logger.warn(`Failed to load alert config: ${String(error)}`);
-      return this.getDefaultAlerts();
+      return { ...defaults, windowMs: this.parseWindow(defaults.window) };
     }
   }
 
-  private getDefaultAlerts(): { sloObjectives: SloObjective[]; alertRules: AlertRule[] } {
+  private getDefaultAlerts(): { sloObjectives: SloObjective[]; alertRules: AlertRule[]; window: string } {
     const sloObjectives: SloObjective[] = [
       {
         id: 'inventory',
@@ -299,7 +319,7 @@ export class MonitoringService {
       },
     ];
 
-    return { sloObjectives, alertRules };
+    return { sloObjectives, alertRules, window: '60m' };
   }
 
   private resolveServiceFromPath(pathname: string): ServiceName {
@@ -312,6 +332,27 @@ export class MonitoringService {
     return 'general';
   }
 
+  private parseWindow(rawWindow?: string): number {
+    const fallbackMs = 60 * 60 * 1000;
+    if (!rawWindow) {
+      return fallbackMs;
+    }
+    const match = rawWindow.toString().trim().match(/^(\d+)\s*([smhd])?$/i);
+    if (!match) {
+      return fallbackMs;
+    }
+    const value = Number(match[1]);
+    const unit = match[2]?.toLowerCase() ?? 'm';
+    const multiplier = unit === 'h' ? 60 * 60 * 1000 : unit === 'd' ? 24 * 60 * 60 * 1000 : unit === 's' ? 1000 : 60 * 1000;
+    return value * multiplier;
+  }
+
+  private pruneWindow(window: SloWindowState, now: number): SloSample[] {
+    const cutoff = now - this.windowSizeMs;
+    window.samples = window.samples.filter((sample) => sample.timestamp >= cutoff);
+    return window.samples;
+  }
+
   private updateSloWindow(service: ServiceName, durationMs: number, statusCode: number) {
     const slo = this.sloObjectives.find((candidate) => candidate.service === service);
     if (!slo) {
@@ -319,25 +360,18 @@ export class MonitoringService {
     }
     const window =
       this.sloWindows[slo.id] ?? {
-        total: 0,
-        errors: 0,
-        durations: [],
-        available: 0,
+        samples: [],
       };
 
-    window.total += 1;
-    window.durations.push(durationMs);
-    if (window.durations.length > 200) {
-      window.durations.shift();
-    }
+    const now = Date.now();
+    window.samples.push({
+      timestamp: now,
+      durationMs,
+      statusCode,
+    });
 
-    if (statusCode >= 500) {
-      window.errors += 1;
-    }
-    if (statusCode < 500) {
-      window.available += 1;
-    }
-    window.lastUpdated = new Date().toISOString();
+    this.pruneWindow(window, now);
+    window.lastUpdated = new Date(now).toISOString();
     this.sloWindows[slo.id] = window;
   }
 
