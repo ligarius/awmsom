@@ -55,6 +55,11 @@ export enum MovementType {
   OUTBOUND_SHIPMENT = 'OUTBOUND_SHIPMENT',
 }
 
+export enum CompatibilityType {
+  ALLOW = 'ALLOW',
+  BLOCK = 'BLOCK',
+}
+
 export enum ReplenishmentMethod {
   FIXED = 'FIXED',
   MIN_MAX = 'MIN_MAX',
@@ -67,6 +72,13 @@ export enum ReplenishmentStatus {
   APPROVED = 'APPROVED',
   REJECTED = 'REJECTED',
   EXECUTED = 'EXECUTED',
+}
+
+export enum SlottingStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  EXECUTED = 'EXECUTED',
+  REJECTED = 'REJECTED',
 }
 
 export enum TransferOrderStatus {
@@ -102,6 +114,17 @@ export enum PickingMethodType {
   WAVE = 'WAVE',
   BATCH = 'BATCH',
   ZONE = 'ZONE',
+}
+
+export enum PermissionResource {
+  CONFIG = 'CONFIG',
+  INVENTORY = 'INVENTORY',
+}
+
+export enum PermissionAction {
+  CONFIG = 'CONFIG',
+  UPDATE = 'UPDATE',
+  READ = 'READ',
 }
 
 export enum ZoneType {
