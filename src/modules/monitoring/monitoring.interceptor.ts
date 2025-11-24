@@ -34,11 +34,23 @@ export class MonitoringInterceptor implements NestInterceptor {
     const response = context.switchToHttp().getResponse<Response>();
     const durationMs = Date.now() - startTime;
     const statusCode = response?.statusCode || (isError ? 500 : 200);
+    const service = request.originalUrl.startsWith('/inventory')
+      ? 'inventory'
+      : request.originalUrl.startsWith('/outbound')
+      ? 'outbound'
+      : 'general';
 
     this.monitoringService.recordRequestMetrics(
       request.method,
       request.originalUrl,
       statusCode,
+      durationMs,
+    );
+
+    this.monitoringService.recordTrace(
+      service,
+      `${request.method} ${request.originalUrl}`,
+      statusCode >= 500 ? 'failed' : statusCode >= 400 ? 'degraded' : 'ok',
       durationMs,
     );
   }

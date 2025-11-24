@@ -1,4 +1,4 @@
-import { Controller, Get, Res } from '@nestjs/common';
+import { Controller, Get, Query, Res } from '@nestjs/common';
 import { Response } from 'express';
 import { MonitoringService } from './monitoring.service';
 
@@ -16,5 +16,23 @@ export class MonitoringController {
   @Get('health')
   async getHealth() {
     return this.monitoringService.getHealthSummary();
+  }
+
+  @Get('slo')
+  async getSloStatuses() {
+    return this.monitoringService.getSloStatuses();
+  }
+
+  @Get('alerts')
+  async getAlerts() {
+    return this.monitoringService.getAlertsOverview();
+  }
+
+  @Get('signals')
+  async getSignals(
+    @Query('service') service?: 'inventory' | 'outbound' | 'general',
+    @Query('level') level?: 'info' | 'warning' | 'error',
+  ) {
+    return this.monitoringService.getSignals({ service, level });
   }
 }
