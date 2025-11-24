@@ -27,9 +27,21 @@ export class AuthService {
       getUserPermissions: async () => [],
     } as unknown as RbacService,
     private readonly userAccountService: UserAccountService = new UserAccountService(prisma as any),
-  ) {}
+  ) {
+    const secret = process.env.JWT_SECRET;
 
-  private readonly jwtSecret = process.env.JWT_SECRET || 'defaultSecret';
+    if (!secret) {
+      throw new Error('JWT secret is not configured');
+    }
+
+    if (Buffer.byteLength(secret, 'utf8') < 32) {
+      throw new Error('JWT secret must be at least 32 characters long');
+    }
+
+    this.jwtSecret = secret;
+  }
+
+  private readonly jwtSecret: string;
 
   private sanitizeUser(user: any) {
     return {
