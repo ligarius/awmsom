@@ -8,6 +8,7 @@ const queueNames = [
   'inventory-snapshot-queue',
   'integration-jobs-queue',
   'maintenance-queue',
+  'replenishment-queue',
 ];
 
 @Module({
