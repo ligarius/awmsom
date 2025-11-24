@@ -264,3 +264,91 @@ export interface CycleCountDocument {
   createdAt?: string;
   lines: CycleCountTaskLine[];
 }
+
+export type ReplenishmentStatus = "PENDING" | "APPROVED" | "EXECUTED" | "REJECTED";
+
+export interface ReplenishmentSuggestion {
+  id: string;
+  sku: string;
+  productName?: string;
+  suggestedQty: number;
+  uom?: string;
+  sourceLocation: string;
+  destinationLocation: string;
+  reason: string;
+  score?: number;
+  status: ReplenishmentStatus;
+  policyApplied?: string;
+  safetyStock?: number;
+  min?: number;
+  max?: number;
+}
+
+export interface ReplenishmentPolicyConfig {
+  min: number;
+  max: number;
+  safetyStock: number;
+  pickingStrategy: "FIFO" | "FEFO";
+  pickingZones: string[];
+  pickingUom?: string;
+  notes?: string;
+}
+
+export interface ReplenishmentHistoryLine {
+  id: string;
+  date: string;
+  sku: string;
+  productName?: string;
+  quantity: number;
+  user: string;
+  source: string;
+  destination: string;
+  reference?: string;
+}
+
+export type SlottingStatus = "PENDING" | "APPROVED" | "EXECUTED" | "REJECTED";
+
+export interface SlottingRecommendation {
+  id: string;
+  sku: string;
+  productName?: string;
+  currentLocation: string;
+  recommendedLocation: string;
+  score: number;
+  abcClass?: string;
+  xyzClass?: string;
+  reason: string;
+  status: SlottingStatus;
+  impact?: string;
+}
+
+export interface SlottingConfig {
+  abcPeriodDays: number;
+  xyzPeriodDays: number;
+  goldenZoneLocations: string[];
+  specialZones?: { name: string; locations: string[] }[];
+  autoSlottingEnabled: boolean;
+}
+
+export interface CompatibilityRule {
+  id: string;
+  location: string;
+  allowedClasses: string[];
+  blockedClasses: string[];
+  notes?: string;
+}
+
+export interface LowStockAlert {
+  sku: string;
+  productName?: string;
+  available: number;
+  min: number;
+  priority: "HIGH" | "MEDIUM" | "LOW";
+}
+
+export interface ABCRotationItem {
+  sku: string;
+  productName?: string;
+  consumption: number;
+  category: string;
+}
