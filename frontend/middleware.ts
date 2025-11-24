@@ -26,11 +26,12 @@ function decodeToken(token: string): { role?: string; permissions?: string[] } {
     const bytes = Uint8Array.from(binaryPayload, (char) => char.charCodeAt(0));
     const decoded = JSON.parse(new TextDecoder().decode(bytes));
 
-    if (!decoded.role || !Array.isArray(decoded.permissions)) {
-      return {};
-    }
+    const role = typeof decoded.role === "string" ? decoded.role : undefined;
+    const permissions = Array.isArray(decoded.permissions)
+      ? decoded.permissions.filter((permission) => typeof permission === "string")
+      : undefined;
 
-    return { role: decoded.role, permissions: decoded.permissions };
+    return { role, permissions };
   } catch (error) {
     return {};
   }
@@ -51,7 +52,7 @@ export function middleware(request: NextRequest) {
     if (rule) {
       const hasRole = rule.role ? role === rule.role : true;
       const hasPermission = rule.permission ? permissions?.includes(rule.permission) : true;
-      if (!hasRole && !hasPermission) {
+      if (!hasRole || !hasPermission) {
         return NextResponse.redirect(new URL("/forbidden", request.url));
       }
     }
