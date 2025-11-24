@@ -25,6 +25,18 @@ interface AlertRule {
   action: string;
 }
 
+interface ParsedAlertCondition {
+  metric?: 'latency_p95' | 'error_rate' | 'availability';
+  comparator?: '>' | '<';
+  thresholdKey?: keyof SloObjective;
+  windowMs: number;
+}
+
+interface AlertState {
+  breachStart?: number;
+  breachDurationMs?: number;
+}
+
 interface SloWindowState {
   samples: SloSample[];
   lastUpdated?: string;
@@ -38,7 +50,7 @@ interface SloStatus {
   availability: number;
   errorRate: number;
   healthy: boolean;
-  alerts: AlertRule[];
+  alerts: (AlertRule & { breachStartedAt?: string; breachDurationMs?: number })[];
   lastUpdated?: string;
 }
 
@@ -73,6 +85,8 @@ export class MonitoringService {
   private totalRequests = 0;
   private readonly sloObjectives: SloObjective[];
   private readonly alertRules: AlertRule[];
+  private readonly parsedAlertConditions: Record<string, ParsedAlertCondition> = {};
+  private readonly alertStates: Record<string, AlertState> = {};
   private readonly sloWindows: Record<string, SloWindowState> = {};
   private readonly serviceSignals: ServiceSignal[] = [];
   private readonly traceSignals: TraceSignal[] = [];
@@ -83,6 +97,9 @@ export class MonitoringService {
     this.sloObjectives = sloObjectives;
     this.alertRules = alertRules;
     this.windowSizeMs = windowMs;
+    this.alertRules.forEach((rule) => {
+      this.parsedAlertConditions[rule.id] = this.parseAlertCondition(rule.condition);
+    });
     this.register = new Registry();
     collectDefaultMetrics({ register: this.register });
 
@@ -169,13 +186,18 @@ export class MonitoringService {
       const latencyP95 = this.calculateP95(aggregates.durations);
       const errorRate = aggregates.total === 0 ? 0 : aggregates.errors / aggregates.total;
       const availability = aggregates.total === 0 ? 1 : aggregates.available / aggregates.total;
-      const healthy =
-        latencyP95 <= slo.targetLatencyMs &&
-        errorRate <= slo.targetErrorRate &&
-        availability >= slo.targetAvailability;
-      const activeAlerts = healthy
-        ? []
-        : this.alertRules.filter((rule) => rule.slo === slo.id);
+      const metrics = { latencyP95, errorRate, availability };
+      const evaluatedAlerts = this.alertRules
+        .filter((rule) => rule.slo === slo.id)
+        .map((rule) => this.evaluateAlertRule(rule, metrics, slo, now))
+        .filter((alert) => alert.active)
+        .map((alert) => ({
+          ...alert.rule,
+          breachStartedAt: alert.breachStart ? new Date(alert.breachStart).toISOString() : undefined,
+          breachDurationMs: alert.breachDurationMs,
+        }));
+
+      const healthy = evaluatedAlerts.length === 0;
 
       return {
         id: slo.id,
@@ -185,7 +207,7 @@ export class MonitoringService {
         availability,
         errorRate,
         healthy,
-        alerts: activeAlerts,
+        alerts: evaluatedAlerts,
         lastUpdated: state.lastUpdated,
       };
     });
@@ -242,6 +264,71 @@ export class MonitoringService {
     return {
       logs,
       traces,
+    };
+  }
+
+  private evaluateAlertRule(
+    rule: AlertRule,
+    metrics: { latencyP95: number; errorRate: number; availability: number },
+    slo: SloObjective,
+    now: number,
+  ): { rule: AlertRule; active: boolean; breachStart?: number; breachDurationMs?: number } {
+    const parsed = this.parsedAlertConditions[rule.id] ?? { windowMs: 0 };
+    const metricValue =
+      parsed.metric === 'latency_p95'
+        ? metrics.latencyP95
+        : parsed.metric === 'error_rate'
+        ? metrics.errorRate
+        : parsed.metric === 'availability'
+        ? metrics.availability
+        : undefined;
+    const thresholdValue = parsed.thresholdKey ? (slo as any)[parsed.thresholdKey] : undefined;
+
+    const conditionMet =
+      metricValue !== undefined &&
+      thresholdValue !== undefined &&
+      parsed.comparator === '>'
+        ? metricValue > thresholdValue
+        : parsed.comparator === '<'
+        ? metricValue < thresholdValue
+        : false;
+
+    if (conditionMet) {
+      const state = this.alertStates[rule.id] ?? {};
+      state.breachStart ??= now;
+      state.breachDurationMs = now - state.breachStart;
+      this.alertStates[rule.id] = state;
+      const active = state.breachDurationMs >= parsed.windowMs;
+      return {
+        rule,
+        active,
+        breachStart: state.breachStart,
+        breachDurationMs: state.breachDurationMs,
+      };
+    }
+
+    delete this.alertStates[rule.id];
+    return { rule, active: false };
+  }
+
+  private parseAlertCondition(condition: string): ParsedAlertCondition {
+    const baseWindow = this.windowSizeMs ?? 0;
+    const match = condition
+      .trim()
+      .match(/^(latency_p95|error_rate|availability)\s*(>|<)\s*(\w+)\s*for\s*(\d+)\s*([smhd])$/i);
+
+    if (!match) {
+      return { windowMs: baseWindow };
+    }
+
+    const [, metric, comparator, thresholdKey, value, unit] = match;
+    const windowMs = this.parseWindow(`${value}${unit}`);
+
+    return {
+      metric: metric.toLowerCase() as ParsedAlertCondition['metric'],
+      comparator: comparator as ParsedAlertCondition['comparator'],
+      thresholdKey: thresholdKey as ParsedAlertCondition['thresholdKey'],
+      windowMs,
     };
   }
 

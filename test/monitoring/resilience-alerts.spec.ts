@@ -16,6 +16,10 @@ describe('MonitoringService resiliencia y caos', () => {
   });
 
   it('activa alertas cuando inventario supera umbrales de latencia/error', () => {
+    const parsed = (service as any).parsedAlertConditions;
+    parsed['inventory-latency'].windowMs = 1000;
+    parsed['inventory-error-rate'].windowMs = 1000;
+
     // Peticiones exitosas iniciales
     service.recordRequestMetrics('GET', '/inventory/items', 200, 120);
     service.recordRequestMetrics('GET', '/inventory/items', 200, 180);
@@ -23,6 +27,10 @@ describe('MonitoringService resiliencia y caos', () => {
     // Degradación puntual con latencia alta y error 5xx
     service.recordRequestMetrics('GET', '/inventory/items', 503, 1500);
     service.recordRequestMetrics('POST', '/inventory/adjustment', 504, 1600);
+
+    service.getSloStatuses();
+    const alertStates = (service as any).alertStates;
+    Object.values(alertStates).forEach((state: any) => (state.breachStart = Date.now() - 1200));
 
     const statuses = service.getSloStatuses();
     const inventoryStatus = statuses.find((status) => status.service === 'inventory');
@@ -34,13 +42,39 @@ describe('MonitoringService resiliencia y caos', () => {
     const alerts = service.getAlertsOverview();
     const alertIds = alerts.active.map((alert) => alert.id);
     expect(alertIds).toEqual(expect.arrayContaining(['inventory-latency', 'inventory-error-rate']));
+    expect(alerts.active.every((alert) => alert.breachDurationMs && alert.breachDurationMs >= 1000)).toBe(true);
+  });
+
+  it('no dispara alertas con una sola muestra hasta cumplir la ventana configurada', () => {
+    const parsed = (service as any).parsedAlertConditions;
+    parsed['inventory-latency'].windowMs = 2000;
+
+    service.recordRequestMetrics('GET', '/inventory/items', 503, 1500);
+
+    const initialAlerts = service.getAlertsOverview();
+    expect(initialAlerts.totalActive).toBe(0);
+
+    const alertStates = (service as any).alertStates;
+    Object.values(alertStates).forEach((state: any) => (state.breachStart = Date.now() - 2500));
+
+    const maturedAlerts = service.getAlertsOverview();
+    expect(maturedAlerts.totalActive).toBe(1);
+    expect(maturedAlerts.active[0].breachDurationMs).toBeGreaterThanOrEqual(2000);
   });
 
   it('mantiene trazas y logs al fallar parcialmente outbound', () => {
+    const parsed = (service as any).parsedAlertConditions;
+    parsed['outbound-latency'].windowMs = 500;
+    parsed['outbound-error-rate'].windowMs = 500;
+
     service.recordRequestMetrics('GET', '/outbound/orders', 200, 300);
     service.recordRequestMetrics('GET', '/outbound/orders', 200, 320);
     service.recordRequestMetrics('POST', '/outbound/orders', 502, 900);
     service.recordTrace('outbound', 'POST /outbound/orders', 'failed', 900);
+
+    service.getSloStatuses();
+    const alertStates = (service as any).alertStates;
+    Object.values(alertStates).forEach((state: any) => (state.breachStart = Date.now() - 800));
 
     const alerts = service.getAlertsOverview();
     expect(alerts.totalActive).toBeGreaterThanOrEqual(1);
@@ -57,6 +91,9 @@ describe('MonitoringService resiliencia y caos', () => {
 
   it('rota la ventana de muestras y evalúa alertas con degradaciones recientes', () => {
     (service as any).windowSizeMs = 1000;
+    const parsed = (service as any).parsedAlertConditions;
+    parsed['inventory-latency'].windowMs = 500;
+    parsed['inventory-error-rate'].windowMs = 500;
 
     service.recordRequestMetrics('GET', '/inventory/items', 503, 1500);
     const inventoryWindow = (service as any).sloWindows['inventory'];
@@ -70,6 +107,10 @@ describe('MonitoringService resiliencia y caos', () => {
     expect(inventoryStatus?.alerts.length).toBe(0);
 
     service.recordRequestMetrics('GET', '/inventory/items', 503, 1600);
+
+    statuses = service.getSloStatuses();
+    const alertStates = (service as any).alertStates;
+    Object.values(alertStates).forEach((state: any) => (state.breachStart = Date.now() - 600));
 
     statuses = service.getSloStatuses();
     inventoryStatus = statuses.find((status) => status.service === 'inventory');
