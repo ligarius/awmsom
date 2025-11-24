@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
@@ -21,25 +21,36 @@ export default function UsersPage() {
   const [data, setData] = useState<PaginatedResult<TenantUser>>({ items: [], total: 0, page: 1, pageSize: 10 });
   const [selected, setSelected] = useState<TenantUser | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const fetchUsers = useCallback(async () => {
+    try {
+      const response = await get<TenantUser[] | PaginatedResult<TenantUser>>("/users");
+      if (Array.isArray(response)) setData({ items: response, total: response.length, page: 1, pageSize: 10 });
+      else setData(response);
+    } catch {
+      toast({ title: "No pudimos cargar los usuarios", variant: "destructive" });
+    }
+  }, [get]);
 
   useEffect(() => {
-    get<TenantUser[] | PaginatedResult<TenantUser>>("/users")
-      .then((response) => {
-        if (Array.isArray(response)) setData({ items: response, total: response.length, page: 1, pageSize: 10 });
-        else setData(response);
-      })
-      .catch(() => toast({ title: "No pudimos cargar los usuarios", variant: "destructive" }));
-  }, [get]);
+    fetchUsers();
+  }, [fetchUsers]);
 
   const toggleUser = async () => {
     if (!selected) return;
     const endpoint = selected.status === "ACTIVE" ? `/users/${selected.id}/deactivate` : `/users/${selected.id}/activate`;
-    await post(endpoint);
-    const refreshed = await get<TenantUser[] | PaginatedResult<TenantUser>>("/users");
-    if (Array.isArray(refreshed)) setData({ items: refreshed, total: refreshed.length, page: 1, pageSize: 10 });
-    else setData(refreshed);
-    setDialogOpen(false);
-    toast({ title: "Estado actualizado" });
+    setLoading(true);
+    try {
+      await post(endpoint);
+      await fetchUsers();
+      setDialogOpen(false);
+      toast({ title: "Estado actualizado" });
+    } catch {
+      toast({ title: "No pudimos actualizar el estado", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const columns: ColumnDef<TenantUser>[] = useMemo(
@@ -102,6 +113,7 @@ export default function UsersPage() {
         description="El usuario no podrá acceder mientras esté inactivo."
         onConfirm={toggleUser}
         confirmLabel={selected?.status === "ACTIVE" ? "Desactivar" : "Activar"}
+        loading={loading}
       />
     </AppShell>
   );
