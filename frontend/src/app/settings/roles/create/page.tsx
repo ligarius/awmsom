@@ -18,15 +18,24 @@ export default function CreateRolePage() {
   const { get, post } = useApi();
   const [form, setForm] = useState({ name: "", description: "", permissions: [] as string[] });
   const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     get<Permission[]>("/permissions").then(setPermissions).catch(() => toast({ title: "No pudimos cargar permisos" }));
   }, [get]);
 
   const onSubmit = async () => {
-    await post("/roles", form);
-    toast({ title: "Rol creado" });
-    router.push("/settings/roles");
+    setLoading(true);
+    try {
+      await post("/roles", form);
+      toast({ title: "Rol creado" });
+      router.push("/settings/roles");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No pudimos crear el rol";
+      toast({ title: "Error al crear el rol", description: message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -62,7 +71,9 @@ export default function CreateRolePage() {
             <Button variant="outline" onClick={() => router.back()}>
               Cancelar
             </Button>
-            <Button onClick={onSubmit}>Crear rol</Button>
+            <Button onClick={onSubmit} disabled={loading}>
+              Crear rol
+            </Button>
           </div>
         </CardFooter>
       </Card>
