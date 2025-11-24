@@ -11,6 +11,7 @@ export class QueuesService {
     @InjectQueue('maintenance-queue') private readonly maintenanceQueue: Queue,
     @InjectQueue('replenishment-queue') private readonly replenishmentQueue: Queue,
     @InjectQueue('slotting-queue') private readonly slottingQueue: Queue,
+    @InjectQueue('waves-queue') private readonly wavesQueue: Queue,
   ) {}
 
   enqueueKpiSnapshotJob(tenantId: string, payload: any) {
@@ -35,5 +36,9 @@ export class QueuesService {
 
   enqueueSlottingJob(tenantId: string, payload: any = {}) {
     return this.slottingQueue.add('calculate', { tenantId, ...payload });
+  }
+
+  enqueueWaveGenerationJob(tenantId: string, payload: any = {}) {
+    return this.wavesQueue.add('generate', { tenantId, ...payload });
   }
 }
