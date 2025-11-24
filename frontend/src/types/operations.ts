@@ -209,7 +209,13 @@ export interface Shipment {
   shipmentHandlingUnits?: ShipmentHandlingUnit[];
 }
 
-export type MovementType = "MANUAL" | "RESLOTTING" | "REPLENISHMENT";
+export type MovementType =
+  | "MANUAL"
+  | "RESLOTTING"
+  | "REPLENISHMENT"
+  | "INTERNAL_TRANSFER"
+  | "INTER_WAREHOUSE_TRANSFER"
+  | "BALANCING";
 
 export interface Movement {
   id: string;
@@ -218,6 +224,10 @@ export interface Movement {
   sku: string;
   productName?: string;
   quantity: number;
+  fromWarehouseId?: string;
+  toWarehouseId?: string;
+  fromWarehouseName?: string;
+  toWarehouseName?: string;
   fromLocation?: string;
   toLocation?: string;
   user?: string;
@@ -336,6 +346,42 @@ export interface CompatibilityRule {
   allowedClasses: string[];
   blockedClasses: string[];
   notes?: string;
+}
+
+export type TransferOrderStatus = "CREATED" | "APPROVED" | "RELEASED" | "COMPLETED" | "CANCELLED";
+
+export interface TransferOrderLine {
+  id: string;
+  productId: string;
+  productSku?: string;
+  productName?: string;
+  quantity: number;
+  uom?: string;
+}
+
+export interface TransferOrder {
+  id: string;
+  sourceWarehouseId: string;
+  destinationWarehouseId: string;
+  status: TransferOrderStatus;
+  lines: TransferOrderLine[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface WarehouseBalancePlan {
+  productId: string;
+  fromWarehouseId: string;
+  toWarehouseId: string;
+  fromLocationId?: string;
+  toLocationId?: string;
+  quantity: number;
+  uom: string;
+  requiresTransferOrder?: boolean;
+  validations?: {
+    availableAtSource?: number;
+    targetHasStorageZone?: boolean;
+  };
 }
 
 export interface LowStockAlert {
