@@ -10,9 +10,26 @@ const routePermissions: { prefix: string; permission?: string; role?: string }[]
 ];
 
 function decodeToken(token: string): { role?: string; permissions?: string[] } {
+  const segments = token.split(".");
+
+  if (segments.length !== 3) {
+    return {};
+  }
+
   try {
-    const payload = token.split(".")[1];
-    const decoded = JSON.parse(Buffer.from(payload, "base64").toString());
+    const payload = segments[1]
+      .replace(/-/g, "+")
+      .replace(/_/g, "/")
+      .padEnd(Math.ceil(segments[1].length / 4) * 4, "=");
+
+    const binaryPayload = atob(payload);
+    const bytes = Uint8Array.from(binaryPayload, (char) => char.charCodeAt(0));
+    const decoded = JSON.parse(new TextDecoder().decode(bytes));
+
+    if (!decoded.role || !Array.isArray(decoded.permissions)) {
+      return {};
+    }
+
     return { role: decoded.role, permissions: decoded.permissions };
   } catch (error) {
     return {};
