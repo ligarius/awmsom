@@ -33,6 +33,15 @@ export function usePermissions() {
   const canPackingExecute = useMemo(() => hasPermission("PACKING_EXECUTE"), []);
   const canShipmentsRead = useMemo(() => hasPermission("SHIPMENTS_READ"), []);
   const canShipmentsExecute = useMemo(() => hasPermission("SHIPMENTS_EXECUTE"), []);
+  const canReplenishmentRead = useMemo(() => hasPermission("REPLENISHMENT_READ"), []);
+  const canReplenishmentApprove = useMemo(() => hasPermission("REPLENISHMENT_APPROVE"), []);
+  const canReplenishmentExecute = useMemo(() => hasPermission("REPLENISHMENT_EXECUTE"), []);
+  const canReplenishmentConfig = useMemo(() => hasPermission("REPLENISHMENT_CONFIG"), []);
+  const canSlottingRead = useMemo(() => hasPermission("SLOTTING_READ"), []);
+  const canSlottingApprove = useMemo(() => hasPermission("SLOTTING_APPROVE"), []);
+  const canSlottingExecute = useMemo(() => hasPermission("SLOTTING_EXECUTE"), []);
+  const canSlottingConfig = useMemo(() => hasPermission("SLOTTING_CONFIG"), []);
+  const canInventoryAdvancedRead = useMemo(() => hasPermission("INVENTORY_ADVANCED_READ"), []);
 
   return {
     canRead,
@@ -58,6 +67,15 @@ export function usePermissions() {
     canWaveRelease,
     canPackingExecute,
     canShipmentsRead,
-    canShipmentsExecute
+    canShipmentsExecute,
+    canReplenishmentRead,
+    canReplenishmentApprove,
+    canReplenishmentExecute,
+    canReplenishmentConfig,
+    canSlottingRead,
+    canSlottingApprove,
+    canSlottingExecute,
+    canSlottingConfig,
+    canInventoryAdvancedRead
   };
 }
