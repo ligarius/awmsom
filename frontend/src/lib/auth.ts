@@ -1,24 +1,19 @@
-import { AUTH_TOKEN_COOKIE } from "@/lib/constants";
 import { useUserStore } from "@/store/user.store";
 
 /**
- * Client-side accessor for the JWT token. We deliberately keep the value in
- * localStorage for axios to inject the Authorization header, while a server
- * action in /app/api/auth/login will also set an HttpOnly cookie so SSR and
- * middleware can validate the session securely.
+ * Client-side helpers for auth-related flows. Authentication now relies on
+ * HttpOnly cookies instead of exposing the token in localStorage.
  */
-export function getAuthToken(): string | undefined {
-  if (typeof window === "undefined") return undefined;
-  return localStorage.getItem(AUTH_TOKEN_COOKIE) ?? undefined;
-}
-
-/**
- * Utility used by the axios interceptor when the backend responds with
- * 401/403. It clears local state and sends the user back to /login.
- */
-export function handleAuthError() {
+export async function handleAuthError() {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(AUTH_TOKEN_COOKIE);
+  try {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+  } catch (error) {
+    console.error("No se pudo cerrar la sesión", error);
+  }
+
+  const store = useUserStore.getState();
+  store.clear();
   window.location.href = "/login";
 }
 
