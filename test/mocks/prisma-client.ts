@@ -55,6 +55,28 @@ export enum MovementType {
   OUTBOUND_SHIPMENT = 'OUTBOUND_SHIPMENT',
 }
 
+export enum ReplenishmentMethod {
+  FIXED = 'FIXED',
+  MIN_MAX = 'MIN_MAX',
+  EOQ = 'EOQ',
+  DOS = 'DOS',
+}
+
+export enum ReplenishmentStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  EXECUTED = 'EXECUTED',
+}
+
+export enum TransferOrderStatus {
+  CREATED = 'CREATED',
+  APPROVED = 'APPROVED',
+  RELEASED = 'RELEASED',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+}
+
 export enum AdjustmentType {
   GAIN = 'GAIN',
   LOSS = 'LOSS',
