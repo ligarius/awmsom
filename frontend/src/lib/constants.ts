@@ -15,6 +15,7 @@ export const APP_SECTIONS = [
   { label: "Packing", href: "/packing", icon: "package" },
   { label: "Despachos", href: "/shipments", icon: "send" },
   { label: "Inventario", href: "/inventory", icon: "boxes" },
+  { label: "Balanceo", href: "/balancing", icon: "scale" },
   { label: "Movimientos", href: "/movements", icon: "arrow-left-right" },
   { label: "Ajustes", href: "/adjustments", icon: "scales" },
   { label: "Cycle Count", href: "/cycle-count", icon: "clipboard-list" },
