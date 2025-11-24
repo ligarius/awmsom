@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useApi } from "@/hooks/useApi";
 import { usePermissions } from "@/hooks/usePermissions";
 import { toast } from "@/components/ui/use-toast";
-import type { PackingShipment } from "@/types/operations";
+import type { HandlingUnit } from "@/types/operations";
 
 export default function PackingListPage() {
   const router = useRouter();
@@ -21,11 +21,11 @@ export default function PackingListPage() {
     if (!canPackingExecute) router.replace("/forbidden");
   }, [canPackingExecute, router]);
 
-  const packingQuery = useQuery({
-    queryKey: ["packing"],
-    queryFn: () => get<PackingShipment[]>("/packing"),
+  const handlingUnitsQuery = useQuery({
+    queryKey: ["handling-units"],
+    queryFn: () => get<HandlingUnit[]>("/outbound/handling-units"),
     enabled: canPackingExecute,
-    onError: () => toast({ title: "No pudimos cargar packing", variant: "destructive" })
+    onError: () => toast({ title: "No pudimos cargar las handling units", variant: "destructive" })
   });
 
   if (!canPackingExecute) return null;
@@ -41,34 +41,34 @@ export default function PackingListPage() {
 
       <Card className="mt-4">
         <CardHeader>
-          <CardTitle>Shipments</CardTitle>
-          <CardDescription>Selecciona un shipment para validar el empaque.</CardDescription>
+          <CardTitle>Handling units</CardTitle>
+          <CardDescription>Selecciona una handling unit para validar el empaque.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2">
-          {packingQuery.data?.map((shipment) => (
-            <div key={shipment.id} className="rounded-lg border p-3">
+          {handlingUnitsQuery.data?.map((hu) => (
+            <div key={hu.id} className="rounded-lg border p-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-semibold">{shipment.code ?? shipment.id}</p>
-                  <p className="text-xs text-muted-foreground">Cliente {shipment.client}</p>
+                  <p className="font-semibold">{hu.code}</p>
+                  <p className="text-xs text-muted-foreground">Tipo {hu.handlingUnitType}</p>
                 </div>
                 <Button size="sm" variant="outline" asChild>
-                  <Link href={`/packing/${shipment.id}`}>Empacar</Link>
+                  <Link href={`/packing/${hu.id}`}>Empacar</Link>
                 </Button>
               </div>
               <div className="mt-2 grid grid-cols-2 text-sm">
                 <div>
                   <p className="text-muted-foreground">Líneas</p>
-                  <p className="font-semibold">{shipment.lines.length}</p>
+                  <p className="font-semibold">{hu.lines.length}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Wave</p>
-                  <p className="font-semibold">{shipment.waveId ?? "-"}</p>
+                  <p className="text-muted-foreground">Órdenes outbound</p>
+                  <p className="font-semibold">{new Set(hu.lines.map((line) => line.outboundOrderId)).size}</p>
                 </div>
               </div>
             </div>
           ))}
-          {!packingQuery.data?.length && <p className="text-sm text-muted-foreground">No hay shipments en packing.</p>}
+          {!handlingUnitsQuery.data?.length && <p className="text-sm text-muted-foreground">No hay handling units para empaquetar.</p>}
         </CardContent>
       </Card>
     </AppShell>

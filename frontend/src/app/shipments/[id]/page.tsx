@@ -11,6 +11,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { toast } from "@/components/ui/use-toast";
 import type { Shipment } from "@/types/operations";
 import { ShipmentCard } from "@/components/operations/ShipmentCard";
+import { PackingSummary } from "@/components/operations/PackingSummary";
 
 export default function ShipmentDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -25,12 +26,12 @@ export default function ShipmentDetailPage() {
 
   const shipmentQuery = useQuery({
     queryKey: ["shipments", id],
-    queryFn: () => get<Shipment>(`/shipments/${id}`),
+    queryFn: () => get<Shipment>(`/outbound/shipments/${id}`),
     enabled: canShipmentsRead
   });
 
   const shipMutation = useMutation({
-    mutationFn: () => post(`/shipments/${id}/ship`),
+    mutationFn: () => post(`/outbound/shipments/${id}/dispatch`, {}),
     onSuccess: () => {
       toast({ title: "Despacho confirmado" });
       queryClient.invalidateQueries({ queryKey: ["shipments"] });
@@ -47,10 +48,10 @@ export default function ShipmentDetailPage() {
         <>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-semibold">{shipmentQuery.data.code}</h1>
-              <p className="text-sm text-muted-foreground">Cliente {shipmentQuery.data.client}</p>
+              <h1 className="text-2xl font-semibold">Shipment {shipmentQuery.data.id}</h1>
+              <p className="text-sm text-muted-foreground">Estado {shipmentQuery.data.status}</p>
             </div>
-            {canShipmentsExecute && shipmentQuery.data.status !== "SHIPPED" && (
+            {canShipmentsExecute && shipmentQuery.data.status !== "DISPATCHED" && (
               <Button onClick={() => shipMutation.mutate()} disabled={shipMutation.isLoading}>
                 Confirmar despacho
               </Button>
@@ -61,21 +62,33 @@ export default function ShipmentDetailPage() {
             <ShipmentCard shipment={shipmentQuery.data} />
             <Card className="md:col-span-2">
               <CardHeader>
-                <CardTitle>Productos enviados</CardTitle>
-                <CardDescription>Resumen final de unidades.</CardDescription>
+                <CardTitle>Handling units asignadas</CardTitle>
+                <CardDescription>Detalle de unidades y órdenes outbound.</CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-3 md:grid-cols-2">
-                {shipmentQuery.data.lines.map((line) => (
-                  <div key={line.productSku} className="rounded-lg border p-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold">{line.productSku}</p>
-                        <p className="text-sm text-muted-foreground">{line.productName}</p>
+              <CardContent className="space-y-4">
+                {shipmentQuery.data.shipmentHandlingUnits?.length ? (
+                  shipmentQuery.data.shipmentHandlingUnits.map((link) => (
+                    <div key={link.id} className="rounded-lg border p-3">
+                      <div className="flex items-center justify-between text-sm">
+                        <div>
+                          <p className="font-semibold">HU {link.handlingUnit?.code ?? link.handlingUnitId}</p>
+                          <p className="text-muted-foreground">{link.handlingUnit?.handlingUnitType ?? "-"}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">Outbound</p>
+                          <p className="font-semibold">{link.outboundOrder?.code ?? link.outboundOrderId}</p>
+                        </div>
                       </div>
-                      <p className="text-sm font-semibold">{line.quantity} {line.uom ?? "uds"}</p>
+                      {link.handlingUnit?.lines?.length ? (
+                        <div className="mt-3">
+                          <PackingSummary lines={link.handlingUnit.lines} />
+                        </div>
+                      ) : null}
                     </div>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">Sin handling units asignadas.</p>
+                )}
               </CardContent>
             </Card>
           </div>

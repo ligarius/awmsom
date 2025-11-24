@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { PackingShipmentLine } from "@/types/operations";
+import type { HandlingUnitLine } from "@/types/operations";
 
-export function PackingSummary({ lines }: { lines: PackingShipmentLine[] }) {
+export function PackingSummary({ lines }: { lines: HandlingUnitLine[] }) {
   return (
     <Card>
       <CardHeader>
@@ -9,16 +9,16 @@ export function PackingSummary({ lines }: { lines: PackingShipmentLine[] }) {
       </CardHeader>
       <CardContent className="space-y-2">
         {lines.map((line) => (
-          <div key={line.productSku} className="rounded-lg border p-3">
+          <div key={line.id} className="rounded-lg border p-3">
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-semibold">{line.productSku}</p>
+                <p className="font-semibold">{line.productSku ?? line.productId}</p>
                 <p className="text-sm text-muted-foreground">{line.productName}</p>
               </div>
               <div className="text-sm">
                 <p className="text-muted-foreground">Cantidad</p>
                 <p className="font-semibold">
-                  {line.packedQuantity ?? line.quantity} {line.uom ?? "uds"}
+                  {line.quantity} {line.uom ?? "uds"}
                 </p>
               </div>
             </div>
