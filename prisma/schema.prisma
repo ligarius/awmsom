@@ -204,6 +204,22 @@ enum PickingTaskStatus {
   CANCELLED
 }
 
+enum WavePickingStrategy {
+  BY_ROUTE
+  BY_CARRIER
+  BY_ZONE
+  BY_TIMEWINDOW
+  BY_PRIORITY
+}
+
+enum WaveStatus {
+  CREATED
+  RELEASED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
 model Tenant {
   id        String   @id @default(uuid())
   name      String
@@ -269,6 +285,9 @@ model Tenant {
   slottingConfigs      SlottingConfig[]
   locationCompatibilityRules LocationCompatibilityRule[]
   slottingRecommendations SlottingRecommendation[]
+  waves                Wave[]
+  waveOrders           WaveOrder[]
+  wavePickingPaths     WavePickingPath[]
 }
 
 model SubscriptionPlan {
@@ -307,6 +326,8 @@ model User {
   oauthIdentities OAuthIdentity[]
   accessReviewsResponsible AccessReview[] @relation("ResponsibleReviewUser")
   accessReviewsReviewer    AccessReview[] @relation("ReviewerUser")
+  assignedWaves Wave[] @relation("WavePickerUser")
+  assignedWavePaths WavePickingPath[] @relation("WavePickingPathPicker")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -491,6 +512,7 @@ model Warehouse {
   slottingConfigs      SlottingConfig[]
   locationCompatibilityRules LocationCompatibilityRule[]
   slottingRecommendations SlottingRecommendation[]
+  waves                Wave[]
   tenant               Tenant                @relation(fields: [tenantId], references: [id])
 
   @@unique([tenantId, code])
@@ -504,6 +526,11 @@ model Location {
   code        String
   description String?
   zone        String
+  aisle       String?
+  row         String?
+  column      String?
+  level       String?
+  coordinates Json?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -795,6 +822,10 @@ model OutboundOrder {
   customerRef       String?
   customerId        String?
   customer          Customer?           @relation(fields: [customerId], references: [id])
+  routeCode         String?
+  carrierCode       String?
+  zoneCode          String?
+  priority          Int?    @default(0)
   status            OutboundOrderStatus
   requestedShipDate DateTime?
   createdAt         DateTime            @default(now())
@@ -807,6 +838,7 @@ model OutboundOrder {
   pickingTasks          PickingTask[]
   handlingUnitLines     HandlingUnitLine[]
   shipmentHandlingUnits ShipmentHandlingUnit[]
+  waveOrders            WaveOrder[]
 
   @@index([warehouseId, status, requestedShipDate])
   @@index([tenantId])
@@ -814,6 +846,10 @@ model OutboundOrder {
   @@index([tenantId, customerRef])
   @@index([tenantId, requestedShipDate])
   @@index([tenantId, status, requestedShipDate])
+  @@index([tenantId, routeCode])
+  @@index([tenantId, carrierCode])
+  @@index([tenantId, zoneCode])
+  @@index([tenantId, priority])
 }
 
 model Customer {
@@ -865,7 +901,8 @@ model PickingTask {
   id              String            @id @default(uuid())
   tenantId        String
   warehouseId     String
-  outboundOrderId String
+  outboundOrderId String?
+  waveId          String?
   status          PickingTaskStatus
   pickerId        String?
   createdAt       DateTime          @default(now())
@@ -875,12 +912,14 @@ model PickingTask {
 
   tenant        Tenant            @relation(fields: [tenantId], references: [id])
   warehouse     Warehouse         @relation(fields: [warehouseId], references: [id])
-  outboundOrder OutboundOrder     @relation(fields: [outboundOrderId], references: [id])
+  outboundOrder OutboundOrder?    @relation(fields: [outboundOrderId], references: [id])
+  wave          Wave?             @relation(fields: [waveId], references: [id])
   lines         PickingTaskLine[]
 
   @@index([warehouseId, outboundOrderId, status])
   @@index([tenantId])
   @@index([tenantId, completedAt])
+  @@index([tenantId, waveId])
 }
 
 model PickingTaskLine {
@@ -907,6 +946,83 @@ model PickingTaskLine {
   @@index([pickingTaskId, productId, batchId, fromLocationId])
   @@index([tenantId])
   @@index([tenantId, productId])
+}
+
+model Wave {
+  id           String   @id @default(uuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+
+  warehouseId  String
+  warehouse    Warehouse @relation(fields: [warehouseId], references: [id])
+
+  strategy     WavePickingStrategy
+  status       WaveStatus @default(CREATED)
+
+  routeCode    String?
+  carrierCode  String?
+  zoneCode     String?
+  timeWindowFrom DateTime?
+  timeWindowTo   DateTime?
+
+  totalOrders  Int      @default(0)
+  totalLines   Int      @default(0)
+  totalUnits   Int      @default(0)
+
+  pickerUserId String?
+  pickerUser   User?    @relation("WavePickerUser", fields: [pickerUserId], references: [id])
+
+  createdAt     DateTime @default(now())
+  releasedAt    DateTime?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  cancelledAt   DateTime?
+
+  waveOrders       WaveOrder[]
+  wavePickingPaths WavePickingPath[]
+  pickingTasks     PickingTask[]
+
+  @@index([tenantId, warehouseId, status])
+}
+
+model WaveOrder {
+  id              String   @id @default(uuid())
+  tenantId        String
+  tenant          Tenant       @relation(fields: [tenantId], references: [id])
+
+  waveId          String
+  wave            Wave         @relation(fields: [waveId], references: [id])
+
+  outboundOrderId String
+  outboundOrder   OutboundOrder @relation(fields: [outboundOrderId], references: [id])
+
+  createdAt       DateTime @default(now())
+
+  @@index([tenantId, waveId])
+  @@index([tenantId, outboundOrderId])
+}
+
+model WavePickingPath {
+  id           String   @id @default(uuid())
+  tenantId     String
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+
+  waveId       String
+  wave         Wave          @relation(fields: [waveId], references: [id])
+
+  pickerUserId String?
+  pickerUser   User?         @relation("WavePickingPathPicker", fields: [pickerUserId], references: [id])
+
+  pathJson     Json
+
+  totalDistance Decimal?
+  totalTime     Decimal?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([tenantId, waveId])
+  @@unique([waveId])
 }
 
 model HandlingUnit {
