@@ -73,6 +73,18 @@ enum ReplenishmentStatus {
   EXECUTED
 }
 
+enum CompatibilityType {
+  ALLOW
+  BLOCK
+}
+
+enum SlottingStatus {
+  PENDING
+  APPROVED
+  EXECUTED
+  REJECTED
+}
+
 enum HandlingUnitType {
   BOX
   PALLET
@@ -254,6 +266,9 @@ model Tenant {
   replenishmentSuggestions ReplenishmentSuggestion[]
   transferOrders       TransferOrder[]
   transferOrderLines   TransferOrderLine[]
+  slottingConfigs      SlottingConfig[]
+  locationCompatibilityRules LocationCompatibilityRule[]
+  slottingRecommendations SlottingRecommendation[]
 }
 
 model SubscriptionPlan {
@@ -473,6 +488,9 @@ model Warehouse {
   inventorySnapshots   InventorySnapshot[]
   replenishmentPolicies ReplenishmentPolicy[]
   kpiSnapshots         KpiSnapshot[]
+  slottingConfigs      SlottingConfig[]
+  locationCompatibilityRules LocationCompatibilityRule[]
+  slottingRecommendations SlottingRecommendation[]
   tenant               Tenant                @relation(fields: [tenantId], references: [id])
 
   @@unique([tenantId, code])
@@ -500,6 +518,7 @@ model Location {
   cycleCountLines      CycleCountLine[]
   inventoryAdjustments InventoryAdjustment[]
   pickingTaskLinesFrom PickingTaskLine[]     @relation("PickingTaskFromLocation")
+  locationCompatibilityRules LocationCompatibilityRule[]
 
   @@unique([warehouseId, code])
   @@index([tenantId])
@@ -534,6 +553,7 @@ model Product {
   inventorySnapshots   InventorySnapshot[]
   replenishmentPolicies ReplenishmentPolicy[]
   transferOrderLines   TransferOrderLine[]
+  slottingRecommendations SlottingRecommendation[]
 
   @@unique([tenantId, sku])
   @@index([tenantId])
@@ -1328,4 +1348,69 @@ model BillingEvent {
   createdAt DateTime @default(now())
 
   @@index([tenantId])
+}
+
+model SlottingConfig {
+  id           String   @id @default(uuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+
+  warehouseId  String
+  warehouse    Warehouse @relation(fields: [warehouseId], references: [id])
+
+  abcPeriodDays       Int
+  xyzPeriodDays       Int
+  goldenZoneLocations Int?
+  heavyProductsZone   Boolean @default(true)
+  fragileProductsZone Boolean @default(true)
+
+  isActive    Boolean @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId, warehouseId])
+}
+
+model LocationCompatibilityRule {
+  id           String @id @default(uuid())
+  tenantId     String
+  tenant       Tenant @relation(fields: [tenantId], references: [id])
+
+  warehouseId  String
+  warehouse    Warehouse @relation(fields: [warehouseId], references: [id])
+
+  locationId   String
+  location     Location @relation(fields: [locationId], references: [id])
+
+  productClass String?
+  productId    String?
+
+  ruleType     CompatibilityType
+
+  createdAt DateTime @default(now())
+}
+
+model SlottingRecommendation {
+  id           String @id @default(uuid())
+  tenantId     String
+  tenant       Tenant @relation(fields: [tenantId], references: [id])
+
+  productId    String
+  product      Product @relation(fields: [productId], references: [id])
+
+  warehouseId  String
+  warehouse    Warehouse @relation(fields: [warehouseId], references: [id])
+
+  currentLocationId String?
+  recommendedLocationId String
+
+  reason        String?
+  score         Decimal   @db.Decimal(20, 4)
+  status        SlottingStatus @default(PENDING)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([tenantId, warehouseId])
 }

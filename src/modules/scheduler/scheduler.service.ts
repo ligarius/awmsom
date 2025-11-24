@@ -72,4 +72,11 @@ export class SchedulerService {
     await Promise.all(tenants.map((tenant) => this.queues.enqueueReplenishmentJob(tenant.id, {})));
     this.logger.log(`Scheduled replenishment for ${tenants.length} tenants`);
   }
+
+  @Cron('30 2 * * *')
+  async enqueueDailySlotting() {
+    const tenants = await this.prisma.tenant.findMany({ where: { isActive: true } });
+    await Promise.all(tenants.map((tenant) => this.queues.enqueueSlottingJob(tenant.id, {})));
+    this.logger.log(`Scheduled slotting for ${tenants.length} tenants`);
+  }
 }
