@@ -14,5 +14,6 @@ module.exports = {
     '^@/(.*)$': '<rootDir>/frontend/src/$1',
     '^@prisma/client$': '<rootDir>/test/mocks/prisma-client',
     '^next/server$': '<rootDir>/test/mocks/next-server',
+    '^next/headers$': '<rootDir>/test/mocks/next-headers',
   },
 };

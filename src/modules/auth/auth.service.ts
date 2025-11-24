@@ -49,6 +49,7 @@ export class AuthService {
       email: user.email,
       tenantId: user.tenantId,
       isActive: user.isActive,
+      fullName: user.fullName ?? user.email,
     };
   }
 
@@ -223,20 +224,34 @@ export class AuthService {
 
   private async issueToken(user: any) {
     const prisma = this.prisma as any;
-    const userRoles = prisma.userRole?.findMany
-      ? await prisma.userRole.findMany({ where: { userId: user.id }, select: { roleId: true } })
+    const roleAssignments = prisma.userRole?.findMany
+      ? await prisma.userRole.findMany({ where: { userId: user.id }, include: { role: true } })
       : [];
     const permissions = await this.rbacService.getUserPermissions(user.tenantId, user.id);
+
+    const roles = roleAssignments.map((assignment: any) => assignment.role?.name ?? assignment.roleId);
+    const permissionList = permissions.map((permission: any) =>
+      typeof permission === 'string' ? permission : `${permission.resource}:${permission.action}`,
+    );
 
     const payload = {
       sub: user.id,
       tenantId: user.tenantId,
-      roles: userRoles.map((r: any) => r.roleId),
-      permissions,
+      roles,
+      permissions: permissionList,
     };
 
     const token = jwt.sign(payload, this.jwtSecret, { expiresIn: '1h' });
-    return { access_token: token, payload };
+    return {
+      accessToken: token,
+      refreshToken: undefined,
+      user: {
+        ...this.sanitizeUser(user),
+        role: roles[0],
+        roles,
+        permissions: permissionList,
+      },
+    };
   }
 
   private async upsertChallenge(user: any, factor: any) {
