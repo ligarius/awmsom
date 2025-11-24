@@ -4,14 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUserStore } from "@/store/user.store";
 import type { AuthCredentials, AuthResponse, AuthUser } from "@/types/auth";
-import { AUTH_TOKEN_COOKIE } from "@/lib/constants";
 import { toast } from "@/components/ui/use-toast";
 
 /**
  * Hook that centralizes auth operations for pages and components.
  * It delegates the heavy lifting to Next.js API routes so we can keep
- * HttpOnly cookies while still storing the access token in localStorage
- * for axios headers.
+ * the session in HttpOnly cookies without persisting any token in
+ * localStorage.
  */
 export function useAuth() {
   const router = useRouter();
@@ -41,13 +40,13 @@ export function useAuth() {
         const response = await fetch("/api/auth/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(credentials)
+          body: JSON.stringify(credentials),
+          credentials: "include"
         });
         if (!response.ok) {
           throw new Error("Credenciales inválidas o servicio no disponible");
         }
         const data = (await response.json()) as AuthResponse;
-        localStorage.setItem(AUTH_TOKEN_COOKIE, data.accessToken);
         setUser(data.user);
         toast({
           title: "Bienvenido",
@@ -67,8 +66,7 @@ export function useAuth() {
   );
 
   const logout = useCallback(async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
-    localStorage.removeItem(AUTH_TOKEN_COOKIE);
+    await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
     clear();
     router.replace("/login");
   }, [clear, router]);
