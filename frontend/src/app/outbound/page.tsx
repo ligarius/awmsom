@@ -14,18 +14,33 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useApi } from "@/hooks/useApi";
 import { toast } from "@/components/ui/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
-import type { PaginatedResult } from "@/types/common";
 import type { OutboundOrder } from "@/types/operations";
 import { OutboundStatusBadge } from "@/components/operations/OutboundStatusBadge";
 
-const statusOptions = ["CREATED", "RELEASED", "PICKING", "PACKED", "SHIPPED"] as const;
+const statusOptions = [
+  "DRAFT",
+  "RELEASED",
+  "PARTIALLY_ALLOCATED",
+  "FULLY_ALLOCATED",
+  "PICKING",
+  "PARTIALLY_PICKED",
+  "PICKED",
+  "CANCELLED"
+] as const;
 
 export default function OutboundListPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { canOutboundRead, canOutboundCreate, canOutboundRelease } = usePermissions();
   const { get, post } = useApi();
-  const [filters, setFilters] = useState({ client: "", status: "", commitmentDate: "" });
+  const [filters, setFilters] = useState({
+    warehouseId: "",
+    status: "",
+    fromDate: "",
+    toDate: "",
+    externalRef: "",
+    customerRef: ""
+  });
 
   useEffect(() => {
     if (!canOutboundRead) {
@@ -35,12 +50,12 @@ export default function OutboundListPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["outbound", filters],
-    queryFn: () => get<PaginatedResult<OutboundOrder>>("/outbound", filters),
+    queryFn: () => get<OutboundOrder[]>("/outbound/orders", filters),
     enabled: canOutboundRead
   });
 
   const releaseMutation = useMutation({
-    mutationFn: (id: string) => post(`/outbound/${id}/release`),
+    mutationFn: (id: string) => post(`/outbound/orders/${id}/release`),
     onSuccess: () => {
       toast({ title: "Orden liberada" });
       queryClient.invalidateQueries({ queryKey: ["outbound"] });
@@ -51,16 +66,16 @@ export default function OutboundListPage() {
   const columns: ColumnDef<OutboundOrder>[] = useMemo(
     () => [
       {
-        accessorKey: "code",
-        header: "Código",
+        accessorKey: "externalRef",
+        header: "Referencia externa",
         cell: ({ row }) => (
           <Link href={`/outbound/${row.original.id}`} className="font-semibold text-primary">
-            {row.original.code}
+            {row.original.externalRef || row.original.customerRef || row.original.id}
           </Link>
         )
       },
-      { accessorKey: "client", header: "Cliente" },
-      { accessorKey: "commitmentDate", header: "Fecha compromiso" },
+      { accessorKey: "customerRef", header: "Cliente" },
+      { accessorKey: "requestedShipDate", header: "Fecha compromiso" },
       {
         accessorKey: "status",
         header: "Estado",
@@ -79,7 +94,7 @@ export default function OutboundListPage() {
             <Button size="sm" variant="ghost" asChild>
               <Link href={`/outbound/${row.original.id}`}>Ver</Link>
             </Button>
-            {canOutboundRelease && row.original.status === "CREATED" && (
+            {canOutboundRelease && row.original.status === "DRAFT" && (
               <Button size="sm" variant="outline" onClick={() => releaseMutation.mutate(row.original.id)} disabled={releaseMutation.isLoading}>
                 Liberar
               </Button>
@@ -110,13 +125,18 @@ export default function OutboundListPage() {
       <Card className="mt-4">
         <CardHeader>
           <CardTitle>Filtros</CardTitle>
-          <CardDescription>Filtra por cliente, estado o fecha compromiso.</CardDescription>
+          <CardDescription>Filtra por referencias, fechas o estado.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-3">
           <Input
-            placeholder="Cliente"
-            value={filters.client}
-            onChange={(e) => setFilters((prev) => ({ ...prev, client: e.target.value }))}
+            placeholder="Referencia externa"
+            value={filters.externalRef}
+            onChange={(e) => setFilters((prev) => ({ ...prev, externalRef: e.target.value }))}
+          />
+          <Input
+            placeholder="Referencia cliente"
+            value={filters.customerRef}
+            onChange={(e) => setFilters((prev) => ({ ...prev, customerRef: e.target.value }))}
           />
           <Select value={filters.status} onValueChange={(status) => setFilters((prev) => ({ ...prev, status }))}>
             <SelectTrigger>
@@ -133,8 +153,20 @@ export default function OutboundListPage() {
           </Select>
           <Input
             type="date"
-            value={filters.commitmentDate}
-            onChange={(e) => setFilters((prev) => ({ ...prev, commitmentDate: e.target.value }))}
+            value={filters.fromDate}
+            onChange={(e) => setFilters((prev) => ({ ...prev, fromDate: e.target.value }))}
+            placeholder="Desde"
+          />
+          <Input
+            type="date"
+            value={filters.toDate}
+            onChange={(e) => setFilters((prev) => ({ ...prev, toDate: e.target.value }))}
+            placeholder="Hasta"
+          />
+          <Input
+            placeholder="Bodega"
+            value={filters.warehouseId}
+            onChange={(e) => setFilters((prev) => ({ ...prev, warehouseId: e.target.value }))}
           />
         </CardContent>
       </Card>
@@ -145,7 +177,16 @@ export default function OutboundListPage() {
           <CardDescription>Lista de todas las órdenes de salida con su estado operativo.</CardDescription>
         </CardHeader>
         <CardContent>
-          <DataTable columns={columns} data={data ?? { items: [], page: 1, pageSize: 20, total: 0 }} />
+          <DataTable
+            columns={columns}
+            data={{
+              items: data ?? [],
+              page: 1,
+              pageSize: data?.length ? Math.max(data.length, 1) : 1,
+              total: data?.length ?? 0
+            }}
+            onFilterChange={(term) => setFilters((prev) => ({ ...prev, externalRef: term }))}
+          />
           {isLoading && <p className="mt-2 text-sm text-muted-foreground">Cargando órdenes...</p>}
         </CardContent>
       </Card>

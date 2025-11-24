@@ -28,7 +28,7 @@ export default function WaveCreatePage() {
 
   const ordersQuery = useQuery({
     queryKey: ["outbound", "released"],
-    queryFn: () => get<OutboundOrder[]>("/outbound", { status: "RELEASED" }),
+    queryFn: () => get<OutboundOrder[]>("/outbound/orders", { status: "RELEASED" }),
     enabled: canWaveCreate
   });
 
