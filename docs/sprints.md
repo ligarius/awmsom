@@ -33,6 +33,10 @@ Esta tabla resume el estado de los sprints del WMS, los objetivos principales y 
    - MFA y OAuth2 habilitados para usuarios internos y externos, con validaciones centralizadas de sesión y dispositivo.
    - Políticas de retención de datos aplicadas junto con cifrado en tránsito y en reposo para catálogos maestros y registros operativos.
    - Proceso recurrente de revisión de permisos con trazabilidad detallada de cambios en roles y accesos sensibles.
+8. **Sprint 8 – Observabilidad y continuidad operativa** (Completado)
+   - Objetivos: reforzar monitoreo, alertamiento proactivo y planes de continuidad frente a caídas parciales de servicios clave.
+   - Historias completadas: tableros de trazabilidad end-to-end, alertas basadas en SLO para APIs críticas y runbooks versionados para respuestas operativas.
+   - Estado final: cobertura de métricas y logs en servicios de inventario y outbound con tests de caos básicos; dependencias para Sprint 9: catálogos de alertas consolidados y runbooks listos para automatización de remediación.
 
 ## Sprints en progreso
 - Ninguno; el alcance comprometido está integrado en la rama principal.
