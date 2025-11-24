@@ -65,4 +65,11 @@ export class SchedulerService {
     );
     this.logger.log(`Scheduled audit log purge for ${tenants.length} tenants`);
   }
+
+  @Cron('0 4 * * *')
+  async enqueueDailyReplenishment() {
+    const tenants = await this.prisma.tenant.findMany({ where: { isActive: true } });
+    await Promise.all(tenants.map((tenant) => this.queues.enqueueReplenishmentJob(tenant.id, {})));
+    this.logger.log(`Scheduled replenishment for ${tenants.length} tenants`);
+  }
 }

@@ -6,7 +6,7 @@ describe('QueuesService', () => {
   const queueFactory = () => ({ add: jest.fn() }) as unknown as Queue;
 
   beforeEach(() => {
-    service = new QueuesService(queueFactory(), queueFactory(), queueFactory(), queueFactory());
+    service = new QueuesService(queueFactory(), queueFactory(), queueFactory(), queueFactory(), queueFactory());
   });
 
   it('enqueues KPI snapshot jobs', async () => {
@@ -31,5 +31,11 @@ describe('QueuesService', () => {
     const spy = jest.spyOn((service as any).maintenanceQueue, 'add');
     await service.enqueueMaintenanceJob('tenant-1', { action: 'clean' });
     expect(spy).toHaveBeenCalledWith('maintenance', { tenantId: 'tenant-1', action: 'clean' });
+  });
+
+  it('enqueues replenishment jobs', async () => {
+    const spy = jest.spyOn((service as any).replenishmentQueue, 'add');
+    await service.enqueueReplenishmentJob('tenant-1', {});
+    expect(spy).toHaveBeenCalledWith('evaluate', { tenantId: 'tenant-1' });
   });
 });

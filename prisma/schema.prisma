@@ -53,10 +53,24 @@ enum MovementType {
   OUTBOUND_SHIPMENT
 }
 
+enum ReplenishmentMethod {
+  FIXED
+  MIN_MAX
+  EOQ
+  DOS
+}
+
 enum MovementStatus {
   PENDING
   COMPLETED
   CANCELLED
+}
+
+enum ReplenishmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXECUTED
 }
 
 enum HandlingUnitType {
@@ -65,6 +79,14 @@ enum HandlingUnitType {
   PARCEL
   CONTAINER
   OTHER
+}
+
+enum TransferOrderStatus {
+  CREATED
+  APPROVED
+  RELEASED
+  COMPLETED
+  CANCELLED
 }
 
 enum PermissionResource {
@@ -224,6 +246,14 @@ model Tenant {
   inventorySnapshots   InventorySnapshot[]
   kpiSnapshots         KpiSnapshot[]
   customers            Customer[]
+  mfaFactors           MfaFactor[]
+  mfaChallenges        MfaChallenge[]
+  oauthIdentities      OAuthIdentity[]
+  accessReviews        AccessReview[]
+  replenishmentPolicies ReplenishmentPolicy[]
+  replenishmentSuggestions ReplenishmentSuggestion[]
+  transferOrders       TransferOrder[]
+  transferOrderLines   TransferOrderLine[]
 }
 
 model SubscriptionPlan {
@@ -258,7 +288,10 @@ model User {
   userRoles UserRole[]
   auditLogs AuditLog[]
   mfaFactors MfaFactor[]
+  mfaChallenges MfaChallenge[]
   oauthIdentities OAuthIdentity[]
+  accessReviewsResponsible AccessReview[] @relation("ResponsibleReviewUser")
+  accessReviewsReviewer    AccessReview[] @relation("ReviewerUser")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -438,6 +471,7 @@ model Warehouse {
   outboundRules        OutboundRule[]
   inventories          Inventory[]
   inventorySnapshots   InventorySnapshot[]
+  replenishmentPolicies ReplenishmentPolicy[]
   kpiSnapshots         KpiSnapshot[]
   tenant               Tenant                @relation(fields: [tenantId], references: [id])
 
@@ -498,6 +532,8 @@ model Product {
   handlingUnitLines    HandlingUnitLine[]
   inventoryPolicies    InventoryPolicy[]
   inventorySnapshots   InventorySnapshot[]
+  replenishmentPolicies ReplenishmentPolicy[]
+  transferOrderLines   TransferOrderLine[]
 
   @@unique([tenantId, sku])
   @@index([tenantId])
@@ -1174,6 +1210,93 @@ model KpiSnapshot {
 
   @@index([tenantId, kpiType, periodStart, periodEnd])
   @@index([tenantId, kpiType, warehouseId, periodStart, periodEnd])
+}
+
+model ReplenishmentPolicy {
+  id           String               @id @default(uuid())
+  tenantId     String
+  tenant       Tenant               @relation(fields: [tenantId], references: [id])
+
+  warehouseId  String
+  warehouse    Warehouse            @relation(fields: [warehouseId], references: [id])
+
+  productId    String
+  product      Product              @relation(fields: [productId], references: [id])
+
+  method       ReplenishmentMethod
+
+  fixedQty     Int?
+  minQty       Int?
+  maxQty       Int?
+  safetyStock  Int?
+  eoqQty       Int?
+  daysOfSupply Int?
+
+  leadTimeDays Int?
+  periodicity  String?
+
+  isActive     Boolean              @default(true)
+
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  suggestions  ReplenishmentSuggestion[]
+
+  @@index([tenantId, warehouseId, productId])
+}
+
+model ReplenishmentSuggestion {
+  id            String               @id @default(uuid())
+  tenantId      String
+  tenant        Tenant               @relation(fields: [tenantId], references: [id])
+
+  policyId      String
+  policy        ReplenishmentPolicy  @relation(fields: [policyId], references: [id])
+
+  warehouseId   String
+  productId     String
+
+  suggestedQty  Int
+  reason        String?
+  status        ReplenishmentStatus  @default(PENDING)
+
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, policyId])
+}
+
+model TransferOrder {
+  id                     String               @id @default(uuid())
+  tenantId               String
+  tenant                 Tenant               @relation(fields: [tenantId], references: [id])
+
+  sourceWarehouseId      String
+  destinationWarehouseId String
+
+  status        TransferOrderStatus @default(CREATED)
+
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  lines         TransferOrderLine[]
+}
+
+model TransferOrderLine {
+  id              String          @id @default(uuid())
+  tenantId        String
+  tenant          Tenant          @relation(fields: [tenantId], references: [id])
+
+  transferOrderId String
+  transferOrder   TransferOrder   @relation(fields: [transferOrderId], references: [id])
+
+  productId       String
+  product         Product         @relation(fields: [productId], references: [id])
+
+  quantity        Int
+
+  createdAt       DateTime        @default(now())
 }
 
 model UsageMetric {
