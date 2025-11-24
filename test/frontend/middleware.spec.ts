@@ -19,9 +19,29 @@ const createRequest = (pathname: string, token?: string): NextRequest => {
     cookies: {
       get: (name: string) => (name === AUTH_TOKEN_COOKIE && token ? { value: token } : undefined)
     },
-    nextUrl: { pathname },
+    headers: {
+      get: (name: string) => (name.toLowerCase() === "cookie" && token ? `${AUTH_TOKEN_COOKIE}=${token}` : undefined)
+    },
+    nextUrl: { pathname, origin: "http://localhost" },
     url: `http://localhost${pathname}`
   } as NextRequest;
+};
+
+const decodePayload = (token?: string) => {
+  if (!token) return {};
+
+  const [, base64Payload] = token.split(".");
+  if (!base64Payload) return {};
+
+  const normalized = base64Payload.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+
+  try {
+    const json = Buffer.from(padded, "base64").toString("utf8");
+    return JSON.parse(json);
+  } catch (error) {
+    return {};
+  }
 };
 
 describe("middleware authorization rules", () => {
@@ -29,28 +49,42 @@ describe("middleware authorization rules", () => {
     global.atob = (data: string) => Buffer.from(data, "base64").toString("binary");
   });
 
+  beforeEach(() => {
+    global.fetch = jest.fn(async (_url, options: any) => {
+      const cookieHeader = options?.headers?.cookie ?? "";
+      const token = typeof cookieHeader === "string" ? cookieHeader.split("=")[1] : undefined;
+      const payload = decodePayload(token);
+
+      return { ok: true, json: async () => ({ user: payload }) } as any;
+    });
+  });
+
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
   describe("/saas", () => {
     const saasPath = "/saas";
 
-    it("denies access when only the role is present", () => {
+    it("denies access when only the role is present", async () => {
       const token = encodeToken({ role: "SUPER_ADMIN" });
-      const response = middleware(createRequest(saasPath, token));
+      const response = await middleware(createRequest(saasPath, token));
 
       expect(response).toEqual(expect.objectContaining({ type: "redirect" }));
       expect((response as { url: string }).url).toContain("/forbidden");
     });
 
-    it("denies access when only the permission is present", () => {
+    it("denies access when only the permission is present", async () => {
       const token = encodeToken({ permissions: ["saas:access"] });
-      const response = middleware(createRequest(saasPath, token));
+      const response = await middleware(createRequest(saasPath, token));
 
       expect(response).toEqual(expect.objectContaining({ type: "redirect" }));
       expect((response as { url: string }).url).toContain("/forbidden");
     });
 
-    it("allows access when role and permission are present", () => {
+    it("allows access when role and permission are present", async () => {
       const token = encodeToken({ role: "SUPER_ADMIN", permissions: ["saas:access"] });
-      const response = middleware(createRequest(saasPath, token));
+      const response = await middleware(createRequest(saasPath, token));
 
       expect(response).toEqual({ type: "next" });
     });
@@ -59,17 +93,17 @@ describe("middleware authorization rules", () => {
   describe("/settings/users", () => {
     const usersPath = "/settings/users";
 
-    it("denies access when the required permission is missing", () => {
+    it("denies access when the required permission is missing", async () => {
       const token = encodeToken({ role: "ADMIN" });
-      const response = middleware(createRequest(usersPath, token));
+      const response = await middleware(createRequest(usersPath, token));
 
       expect(response).toEqual(expect.objectContaining({ type: "redirect" }));
       expect((response as { url: string }).url).toContain("/forbidden");
     });
 
-    it("allows access when the permission is present", () => {
+    it("allows access when the permission is present", async () => {
       const token = encodeToken({ permissions: ["users:manage"] });
-      const response = middleware(createRequest(usersPath, token));
+      const response = await middleware(createRequest(usersPath, token));
 
       expect(response).toEqual({ type: "next" });
     });
@@ -78,17 +112,17 @@ describe("middleware authorization rules", () => {
   describe("/settings/roles", () => {
     const rolesPath = "/settings/roles";
 
-    it("denies access without the required permission", () => {
+    it("denies access without the required permission", async () => {
       const token = encodeToken({ role: "ADMIN" });
-      const response = middleware(createRequest(rolesPath, token));
+      const response = await middleware(createRequest(rolesPath, token));
 
       expect(response).toEqual(expect.objectContaining({ type: "redirect" }));
       expect((response as { url: string }).url).toContain("/forbidden");
     });
 
-    it("allows access when the permission is present", () => {
+    it("allows access when the permission is present", async () => {
       const token = encodeToken({ permissions: ["roles:manage"] });
-      const response = middleware(createRequest(rolesPath, token));
+      const response = await middleware(createRequest(rolesPath, token));
 
       expect(response).toEqual({ type: "next" });
     });

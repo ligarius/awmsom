@@ -177,11 +177,11 @@ describe('Auth module', () => {
       password: 'secret123',
       tenantId: tenant.id,
     })) as any;
-    const decoded = jwt.verify(result.access_token, strongJwtSecret) as any;
+    const decoded = jwt.verify(result.accessToken, strongJwtSecret) as any;
 
     expect(decoded.tenantId).toBe(tenant.id);
-    expect(result.payload.tenantId).toBe(tenant.id);
-    expect(decoded.sub).toBe(result.payload.sub);
+    expect(result.user.tenantId).toBe(tenant.id);
+    expect(decoded.sub).toBe(result.user.id);
   });
 
   it('requires MFA when factors are present and returns a challenge', async () => {
@@ -212,7 +212,43 @@ describe('Auth module', () => {
     const totpCode = challenge?.code;
 
     const verified = await authService.verifyMfa({ challengeId: firstStep.challengeId, code: totpCode } as any);
-    expect(verified.access_token).toBeDefined();
+    expect(verified.accessToken).toBeDefined();
+    expect(verified.user.role).toBeUndefined();
+  });
+
+  it('returns roles and permissions on token issuance after MFA verification', async () => {
+    const rbacService = {
+      getUserPermissions: jest.fn().mockResolvedValue([{ resource: 'users', action: 'manage' }]),
+    } as any;
+
+    authService = new AuthService(prisma as any, rbacService as any, userAccountService as any);
+
+    const tenant = prisma.tenant.create({ data: { name: 'Tenant', code: 'T-MFA-PROFILE', plan: 'pro' } });
+    const user = await authService.register({ email: 'profile@example.com', password: 'secret123', tenantId: tenant.id });
+
+    (prisma as any).userRole.findMany = jest
+      .fn()
+      .mockResolvedValue([{ roleId: 'ADMIN', role: { name: 'ADMIN' } }]);
+
+    await authService.enrollFactor({
+      userId: user.id,
+      tenantId: tenant.id,
+      type: 'sms',
+      label: 'sms-device',
+    });
+
+    const firstStep = (await authService.login({
+      email: 'profile@example.com',
+      password: 'secret123',
+      tenantId: tenant.id,
+    })) as any;
+
+    const challenge = prisma.mfaChallenges.find((c) => c.id === firstStep.challengeId);
+    const verified = await authService.verifyMfa({ challengeId: firstStep.challengeId, code: challenge?.code } as any);
+
+    expect(verified.user.roles).toEqual(['ADMIN']);
+    expect(verified.user.role).toBe('ADMIN');
+    expect(verified.user.permissions).toContain('users:manage');
   });
 
   it('rejects reused MFA codes by challenge', async () => {
@@ -235,7 +271,7 @@ describe('Auth module', () => {
     const challenge = prisma.mfaChallenges.find((c) => c.id === firstStep.challengeId);
     const verified = await authService.verifyMfa({ challengeId: firstStep.challengeId, code: challenge?.code } as any);
 
-    expect(verified.access_token).toBeDefined();
+    expect(verified.accessToken).toBeDefined();
     expect(challenge?.consumedAt).toBeInstanceOf(Date);
     expect(challenge?.code).toBeNull();
 
@@ -369,7 +405,7 @@ describe('Auth module', () => {
       idToken,
     });
 
-    expect(firstLogin.access_token).toBeDefined();
+    expect(firstLogin.accessToken).toBeDefined();
     expect(prisma.oauthIdentities).toHaveLength(1);
     expect(prisma.oauthIdentities[0].providerUserId).toBe('abc-123');
 
@@ -380,7 +416,7 @@ describe('Auth module', () => {
       idToken,
     });
 
-    expect(secondLogin.access_token).toBeDefined();
+    expect(secondLogin.accessToken).toBeDefined();
     expect(prisma.users).toHaveLength(1);
   });
 
