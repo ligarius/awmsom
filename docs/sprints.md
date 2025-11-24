@@ -38,8 +38,25 @@ Esta tabla resume el estado de los sprints del WMS, los objetivos principales y 
    - Historias completadas: tableros de trazabilidad end-to-end, alertas basadas en SLO para APIs críticas y runbooks versionados para respuestas operativas.
    - Estado final: cobertura de métricas y logs en servicios de inventario y outbound con tests de caos básicos; dependencias para Sprint 9: catálogos de alertas consolidados y runbooks listos para automatización de remediación.
 
+## Sprint 9 – Automatización de alertas y remediación (En progreso)
+- **Objetivos**: orquestar la automatización de respuestas ante incidentes críticos consumiendo los catálogos de alertas y runbooks consolidados en Sprint 8, extender la cobertura de monitoreo a flujos mixtos inbound/outbound y documentar evidencias de continuidad.
+- **Historias en progreso**:
+  1. Integrar el catálogo de alertas y umbrales de SLO definidos en [`configuration/alerts.yml`](../configuration/alerts.yml) con tableros y vistas operativas actualizadas en [`docs/dashboards/observabilidad.md`](dashboards/observabilidad.md).
+  2. Automatizar los pasos de mitigación en el runbook de resiliencia para inventario y outbound, extendiendo la guía de [`docs/runbooks/inventory-outbound-resilience.md`](runbooks/inventory-outbound-resilience.md) con ganchos para ejecuciones programáticas.
+  3. Validar escenarios de degradación y recuperación mediante pruebas de resiliencia y alertas en [`test/monitoring/resilience-alerts.spec.ts`](../test/monitoring/resilience-alerts.spec.ts) y auditoría de salud en [`test/monitoring/audit-monitoring.spec.ts`](../test/monitoring/audit-monitoring.spec.ts).
+- **Estado actual**: las dependencias heredadas del Sprint 8 (catálogos de alertas consolidados y runbooks versionados) están alineadas con los despliegues de observabilidad; se encuentran en validación las automatizaciones de remediación y las pruebas de resiliencia.
+- **Criterios de aceptación**:
+  - El catálogo de alertas presenta umbrales revisados y versionados, con trazabilidad en dashboards y endpoints (`/monitoring/alerts` y `/monitoring/slo`).
+  - Los runbooks incluyen pasos accionables para ejecutores humanos y para pipelines automatizados, con enlaces a comandos y scripts documentados.
+  - Las pruebas de resiliencia y alertamiento pasan en entornos de staging con evidencia de ejecución y cobertura sobre los flujos de inventario/outbound.
+- **Artefactos clave**:
+  - Catálogo de alertas y SLOs: [`configuration/alerts.yml`](../configuration/alerts.yml).
+  - Runbook de resiliencia y remediación: [`docs/runbooks/inventory-outbound-resilience.md`](runbooks/inventory-outbound-resilience.md).
+  - Tableros y vistas de observabilidad: [`docs/dashboards/observabilidad.md`](dashboards/observabilidad.md).
+  - Pruebas automatizadas de monitoreo y resiliencia: [`test/monitoring/resilience-alerts.spec.ts`](../test/monitoring/resilience-alerts.spec.ts) y [`test/monitoring/audit-monitoring.spec.ts`](../test/monitoring/audit-monitoring.spec.ts).
+
 ## Sprints en progreso
-- Ninguno; el alcance comprometido está integrado en la rama principal.
+- Sprint 9 activo con automatización de alertas y remediación en validación (ver detalle en la sección anterior).
 
 ## Sprints pendientes
  - Ninguno; el backlog relevante está priorizado y planificado.
