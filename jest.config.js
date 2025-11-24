@@ -11,6 +11,8 @@ module.exports = {
     },
   },
   moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/frontend/src/$1',
     '^@prisma/client$': '<rootDir>/test/mocks/prisma-client',
+    '^next/server$': '<rootDir>/test/mocks/next-server',
   },
 };
