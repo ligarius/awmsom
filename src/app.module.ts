@@ -33,6 +33,7 @@ import { CacheModule } from './common/cache/cache.module';
 import { QueuesModule } from './infrastructure/queues/queues.module';
 import { SnapshotsModule } from './modules/snapshots/snapshots.module';
 import { SchedulerModule } from './modules/scheduler/scheduler.module';
+import { ReplenishmentModule } from './modules/replenishment/replenishment.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { SchedulerModule } from './modules/scheduler/scheduler.module';
     QueuesModule,
     SnapshotsModule,
     SchedulerModule,
+    ReplenishmentModule,
   ],
   providers: [
     RateLimitService,
