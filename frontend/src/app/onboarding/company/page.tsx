@@ -22,11 +22,44 @@ export default function OnboardingCompanyPage() {
     address: "",
     phone: ""
   });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
 
   const onSubmit = async () => {
-    await post("/onboarding/company", form);
-    toast({ title: "Datos guardados" });
-    router.push("/onboarding/finish");
+    const validationErrors: Record<string, string> = {};
+
+    if (!form.name.trim()) {
+      validationErrors.name = "El nombre es requerido.";
+    }
+
+    if (!form.taxId.trim()) {
+      validationErrors.taxId = "El RUT / Tax ID es requerido.";
+    }
+
+    if (!form.adminEmail.trim()) {
+      validationErrors.adminEmail = "El email del administrador es requerido.";
+    }
+
+    setErrors(validationErrors);
+
+    if (Object.keys(validationErrors).length > 0) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await post("/onboarding/company", form);
+      toast({ title: "Datos guardados" });
+      router.push("/onboarding/finish");
+    } catch (error) {
+      toast({
+        title: "No se pudieron guardar los datos",
+        description: "Revisa la información e inténtalo nuevamente.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -42,10 +75,12 @@ export default function OnboardingCompanyPage() {
               <div>
                 <Label htmlFor="name">Nombre empresa</Label>
                 <Input id="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
               </div>
               <div>
                 <Label htmlFor="taxId">RUT / Tax ID</Label>
                 <Input id="taxId" value={form.taxId} onChange={(e) => setForm({ ...form, taxId: e.target.value })} />
+                {errors.taxId && <p className="text-sm text-destructive">{errors.taxId}</p>}
               </div>
               <div>
                 <Label htmlFor="logo">Logo (URL)</Label>
@@ -54,6 +89,7 @@ export default function OnboardingCompanyPage() {
               <div>
                 <Label htmlFor="adminEmail">Email administrador</Label>
                 <Input id="adminEmail" type="email" value={form.adminEmail} onChange={(e) => setForm({ ...form, adminEmail: e.target.value })} />
+                {errors.adminEmail && <p className="text-sm text-destructive">{errors.adminEmail}</p>}
               </div>
             </div>
           </FormSection>
@@ -75,7 +111,9 @@ export default function OnboardingCompanyPage() {
             <Button variant="outline" onClick={() => router.back()}>
               Volver
             </Button>
-            <Button onClick={onSubmit}>Guardar y continuar</Button>
+            <Button onClick={onSubmit} disabled={loading}>
+              Guardar y continuar
+            </Button>
           </div>
         </CardFooter>
       </Card>
