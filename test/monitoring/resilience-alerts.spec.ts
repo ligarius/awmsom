@@ -54,4 +54,30 @@ describe('MonitoringService resiliencia y caos', () => {
     expect(sloStatus?.errorRate).toBeGreaterThan(0);
     expect(sloStatus?.availability).toBeLessThan(1);
   });
+
+  it('rota la ventana de muestras y evalúa alertas con degradaciones recientes', () => {
+    (service as any).windowSizeMs = 1000;
+
+    service.recordRequestMetrics('GET', '/inventory/items', 503, 1500);
+    const inventoryWindow = (service as any).sloWindows['inventory'];
+    inventoryWindow.samples.forEach((sample: any) => (sample.timestamp = Date.now() - 120000));
+
+    service.recordRequestMetrics('GET', '/inventory/items', 200, 120);
+
+    let statuses = service.getSloStatuses();
+    let inventoryStatus = statuses.find((status) => status.service === 'inventory');
+    expect(inventoryStatus?.healthy).toBe(true);
+    expect(inventoryStatus?.alerts.length).toBe(0);
+
+    service.recordRequestMetrics('GET', '/inventory/items', 503, 1600);
+
+    statuses = service.getSloStatuses();
+    inventoryStatus = statuses.find((status) => status.service === 'inventory');
+    expect(inventoryStatus?.healthy).toBe(false);
+    expect(inventoryStatus?.errorRate).toBeGreaterThan(0.01);
+
+    const alerts = service.getAlertsOverview();
+    const inventoryAlertIds = alerts.active.map((alert) => alert.id);
+    expect(inventoryAlertIds).toEqual(expect.arrayContaining(['inventory-latency', 'inventory-error-rate']));
+  });
 });
