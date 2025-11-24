@@ -22,6 +22,17 @@ export function usePermissions() {
   const canAdjustmentsWrite = useMemo(() => hasPermission("ADJUSTMENT_WRITE"), []);
   const canCycleCountCreate = useMemo(() => hasPermission("CYCLECOUNT_CREATE"), []);
   const canCycleCountExecute = useMemo(() => hasPermission("CYCLECOUNT_EXECUTE"), []);
+  const canOutboundRead = useMemo(() => hasPermission("OUTBOUND_READ"), []);
+  const canOutboundCreate = useMemo(() => hasPermission("OUTBOUND_CREATE"), []);
+  const canOutboundRelease = useMemo(() => hasPermission("OUTBOUND_RELEASE"), []);
+  const canPickingRead = useMemo(() => hasPermission("PICKING_READ"), []);
+  const canPickingExecute = useMemo(() => hasPermission("PICKING_EXECUTE"), []);
+  const canWaveCreate = useMemo(() => hasPermission("WAVES_CREATE"), []);
+  const canWavePlan = useMemo(() => hasPermission("WAVES_PLAN"), []);
+  const canWaveRelease = useMemo(() => hasPermission("WAVES_RELEASE"), []);
+  const canPackingExecute = useMemo(() => hasPermission("PACKING_EXECUTE"), []);
+  const canShipmentsRead = useMemo(() => hasPermission("SHIPMENTS_READ"), []);
+  const canShipmentsExecute = useMemo(() => hasPermission("SHIPMENTS_EXECUTE"), []);
 
   return {
     canRead,
@@ -36,6 +47,17 @@ export function usePermissions() {
     canMovementsWrite,
     canAdjustmentsWrite,
     canCycleCountCreate,
-    canCycleCountExecute
+    canCycleCountExecute,
+    canOutboundRead,
+    canOutboundCreate,
+    canOutboundRelease,
+    canPickingRead,
+    canPickingExecute,
+    canWaveCreate,
+    canWavePlan,
+    canWaveRelease,
+    canPackingExecute,
+    canShipmentsRead,
+    canShipmentsExecute
   };
 }
