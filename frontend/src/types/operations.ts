@@ -65,34 +65,44 @@ export interface ProductInventoryDetail {
   recentMovements: Movement[];
 }
 
-export type OutboundStatus = "CREATED" | "RELEASED" | "PICKING" | "PACKED" | "SHIPPED";
+export type OutboundStatus =
+  | "DRAFT"
+  | "RELEASED"
+  | "PARTIALLY_ALLOCATED"
+  | "FULLY_ALLOCATED"
+  | "PICKING"
+  | "PARTIALLY_PICKED"
+  | "PICKED"
+  | "CANCELLED";
 
 export interface OutboundLine {
   id: string;
   productId: string;
-  productSku: string;
+  requestedQty: number;
+  allocatedQty?: number;
+  pickedQty?: number;
+  uom: string;
+  productSku?: string;
   productName?: string;
-  quantity: number;
-  pickedQuantity?: number;
-  uom?: string;
   locationCode?: string;
-  batchRequired?: boolean;
 }
 
 export interface OutboundOrder {
   id: string;
-  code: string;
-  client: string;
-  warehouseId?: string;
+  warehouseId: string;
   warehouseName?: string;
-  commitmentDate?: string;
+  externalRef?: string | null;
+  customerRef?: string | null;
+  requestedShipDate?: string | null;
   status: OutboundStatus;
   lines: OutboundLine[];
   pickerId?: string | null;
   pickerName?: string | null;
   waveId?: string | null;
-  totalLines?: number;
   createdAt?: string;
+  updatedAt?: string;
+  code?: string;
+  client?: string;
 }
 
 export type PickingTaskStatus = "PENDING" | "IN_PROGRESS" | "DONE";

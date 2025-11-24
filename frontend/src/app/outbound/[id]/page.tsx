@@ -29,12 +29,12 @@ export default function OutboundDetailPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["outbound", id],
-    queryFn: () => get<OutboundOrder>(`/outbound/${id}`),
+    queryFn: () => get<OutboundOrder>(`/outbound/orders/${id}`),
     enabled: canOutboundRead
   });
 
   const releaseMutation = useMutation({
-    mutationFn: () => post(`/outbound/${id}/release`),
+    mutationFn: () => post(`/outbound/orders/${id}/release`),
     onSuccess: () => {
       toast({ title: "Orden liberada" });
       queryClient.invalidateQueries({ queryKey: ["outbound"] });
@@ -60,8 +60,10 @@ export default function OutboundDetailPage() {
         <>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-semibold">{data.code}</h1>
-              <p className="text-sm text-muted-foreground">Cliente {data.client} • Bodega {data.warehouseName}</p>
+              <h1 className="text-2xl font-semibold">{data.externalRef ?? data.customerRef ?? data.id}</h1>
+              <p className="text-sm text-muted-foreground">
+                Cliente {data.customerRef ?? "-"} • Bodega {data.warehouseName ?? data.warehouseId}
+              </p>
             </div>
             <div className="flex items-center gap-2">
               <OutboundStatusBadge status={data.status} />
@@ -71,7 +73,7 @@ export default function OutboundDetailPage() {
               <Button variant="outline" asChild>
                 <Link href="/waves/create">Asignar a Wave</Link>
               </Button>
-              {canOutboundRelease && data.status === "CREATED" && (
+              {canOutboundRelease && data.status === "DRAFT" && (
                 <Button onClick={() => releaseMutation.mutate()} disabled={releaseMutation.isLoading}>
                   Liberar orden
                 </Button>
@@ -87,7 +89,7 @@ export default function OutboundDetailPage() {
             <CardContent className="grid gap-3 md:grid-cols-3">
               <div>
                 <p className="text-xs text-muted-foreground">Fecha compromiso</p>
-                <p className="font-semibold">{data.commitmentDate ?? "-"}</p>
+                <p className="font-semibold">{data.requestedShipDate ?? "-"}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Picker asignado</p>
@@ -107,12 +109,12 @@ export default function OutboundDetailPage() {
             </CardHeader>
             <CardContent className="grid gap-3 md:grid-cols-2">
               {data.lines
-                .filter((line) => (line.pickedQuantity ?? 0) < line.quantity)
+                .filter((line) => (line.pickedQty ?? 0) < line.requestedQty)
                 .map((line) => (
                   <div key={line.id} className="rounded-lg border p-3">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-semibold">{line.productSku}</p>
+                        <p className="font-semibold">{line.productSku ?? line.productId}</p>
                         <p className="text-sm text-muted-foreground">{line.productName}</p>
                       </div>
                       <Badge variant="outline">Pendiente</Badge>
@@ -120,11 +122,11 @@ export default function OutboundDetailPage() {
                     <div className="mt-2 grid grid-cols-3 text-sm">
                       <div>
                         <p className="text-muted-foreground">Pedido</p>
-                        <p className="font-semibold">{line.quantity}</p>
+                        <p className="font-semibold">{line.requestedQty}</p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Pickeado</p>
-                        <p className="font-semibold">{line.pickedQuantity ?? 0}</p>
+                        <p className="font-semibold">{line.pickedQty ?? 0}</p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Ubicación</p>
@@ -133,7 +135,7 @@ export default function OutboundDetailPage() {
                     </div>
                   </div>
                 ))}
-              {!data.lines.filter((line) => (line.pickedQuantity ?? 0) < line.quantity).length && (
+              {!data.lines.filter((line) => (line.pickedQty ?? 0) < line.requestedQty).length && (
                 <p className="text-sm text-muted-foreground">No hay líneas pendientes.</p>
               )}
             </CardContent>
@@ -146,12 +148,12 @@ export default function OutboundDetailPage() {
             </CardHeader>
             <CardContent className="grid gap-3 md:grid-cols-2">
               {data.lines
-                .filter((line) => (line.pickedQuantity ?? 0) >= line.quantity)
+                .filter((line) => (line.pickedQty ?? 0) >= line.requestedQty)
                 .map((line) => (
                   <div key={line.id} className="rounded-lg border p-3">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-semibold">{line.productSku}</p>
+                        <p className="font-semibold">{line.productSku ?? line.productId}</p>
                         <p className="text-sm text-muted-foreground">{line.productName}</p>
                       </div>
                       <Badge variant="secondary">Completo</Badge>
@@ -159,11 +161,11 @@ export default function OutboundDetailPage() {
                     <div className="mt-2 grid grid-cols-3 text-sm">
                       <div>
                         <p className="text-muted-foreground">Pedido</p>
-                        <p className="font-semibold">{line.quantity}</p>
+                        <p className="font-semibold">{line.requestedQty}</p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Pickeado</p>
-                        <p className="font-semibold">{line.pickedQuantity ?? 0}</p>
+                        <p className="font-semibold">{line.pickedQty ?? 0}</p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Ubicación</p>
@@ -172,7 +174,7 @@ export default function OutboundDetailPage() {
                     </div>
                   </div>
                 ))}
-              {!data.lines.filter((line) => (line.pickedQuantity ?? 0) >= line.quantity).length && (
+              {!data.lines.filter((line) => (line.pickedQty ?? 0) >= line.requestedQty).length && (
                 <p className="text-sm text-muted-foreground">Sin líneas completadas todavía.</p>
               )}
             </CardContent>

@@ -38,12 +38,12 @@ export default function PickingDashboardPage() {
 
   const outboundQuery = useQuery({
     queryKey: ["outbound", "ready"],
-    queryFn: () => get<OutboundOrder[]>("/outbound"),
+    queryFn: () => get<OutboundOrder[]>("/outbound/orders"),
     enabled: canPickingRead,
     onError: () => toast({ title: "No pudimos cargar outbound", variant: "destructive" })
   });
 
-  const pendingRelease = outboundQuery.data?.filter((o) => o.status === "CREATED").length ?? 0;
+  const pendingRelease = outboundQuery.data?.filter((o) => o.status === "DRAFT").length ?? 0;
   const readyToPick = outboundQuery.data?.filter((o) => o.status === "RELEASED").length ?? 0;
   const wavesOpen = wavesQuery.data?.filter((w) => w.status !== "DONE").length ?? 0;
   const myTasks = tasksQuery.data ?? [];
