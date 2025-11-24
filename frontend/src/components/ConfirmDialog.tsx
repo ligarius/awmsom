@@ -16,6 +16,7 @@ interface ConfirmDialogProps {
   cancelLabel?: string;
   onConfirm: () => void;
   onOpenChange: (open: boolean) => void;
+  loading?: boolean;
 }
 
 export function ConfirmDialog({
@@ -25,7 +26,8 @@ export function ConfirmDialog({
   confirmLabel = "Confirmar",
   cancelLabel = "Cancelar",
   onConfirm,
-  onOpenChange
+  onOpenChange,
+  loading = false
 }: ConfirmDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -35,10 +37,12 @@ export function ConfirmDialog({
           {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
         <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             {cancelLabel}
           </Button>
-          <Button onClick={onConfirm}>{confirmLabel}</Button>
+          <Button onClick={onConfirm} disabled={loading} aria-busy={loading}>
+            {loading ? "Procesando..." : confirmLabel}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
