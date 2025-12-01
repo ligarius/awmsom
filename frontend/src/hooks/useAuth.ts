@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUserStore } from "@/store/user.store";
-import type { AuthCredentials, AuthMfaChallenge, AuthResponse, AuthUser } from "@/types/auth";
+import type { AuthCredentials, AuthMfaRequiredResponse, AuthResponse, AuthUser } from "@/types/auth";
 import { toast } from "@/components/ui/use-toast";
 
 /**
@@ -16,7 +16,9 @@ export function useAuth() {
   const router = useRouter();
   const { user, setUser, clear } = useUserStore();
   const [initializing, setInitializing] = useState(true);
-  const [mfaChallenge, setMfaChallenge] = useState<AuthMfaChallenge | null>(null);
+  const [mfaChallenge, setMfaChallenge] = useState<AuthMfaRequiredResponse | null>(null);
+  const [pendingCredentials, setPendingCredentials] = useState<Omit<AuthCredentials, "challengeId" | "mfaCode" | "factorId"> | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
   const [lastTenantId, setLastTenantId] = useState<string | null>(null);
 
   const getUser = useCallback(async () => {
@@ -41,8 +43,12 @@ export function useAuth() {
       try {
         const payload: AuthCredentials = {
           ...credentials,
-          tenantId: credentials.tenantId || lastTenantId || mfaChallenge?.user?.tenantId || ""
+          tenantId: credentials.tenantId || lastTenantId || ""
         };
+
+        if (!credentials.mfaCode) {
+          setPendingCredentials({ email: payload.email, password: payload.password, tenantId: payload.tenantId });
+        }
 
         if (payload.tenantId) {
           setLastTenantId(payload.tenantId);
@@ -51,6 +57,10 @@ export function useAuth() {
         if (mfaChallenge) {
           payload.challengeId = credentials.challengeId ?? mfaChallenge.challengeId;
           payload.factorId = credentials.factorId ?? mfaChallenge.factor?.id;
+        }
+
+        if (mfaCode && payload.challengeId === mfaChallenge?.challengeId && !payload.mfaCode) {
+          payload.mfaCode = mfaCode;
         }
 
         const response = await fetch("/api/auth/login", {
@@ -67,13 +77,11 @@ export function useAuth() {
 
         if (data.mfaRequired) {
           setMfaChallenge(data);
+          setMfaCode("");
           toast({
             title: "Se requiere verificación MFA",
             description: "Ingresa el código enviado para completar el acceso"
           });
-          if (data.user?.tenantId) {
-            setLastTenantId(data.user.tenantId);
-          }
           return data;
         }
 
@@ -82,6 +90,8 @@ export function useAuth() {
         }
 
         setMfaChallenge(null);
+        setMfaCode("");
+        setPendingCredentials(null);
         if (data.user.tenantId) {
           setLastTenantId(data.user.tenantId);
         }
@@ -101,7 +111,29 @@ export function useAuth() {
         throw error;
       }
     },
-    [lastTenantId, mfaChallenge, router, setLastTenantId, setMfaChallenge, setUser]
+    [lastTenantId, mfaChallenge, mfaCode, router, setLastTenantId, setMfaChallenge, setUser]
+  );
+
+  const submitMfaCode = useCallback(
+    async (code: string, options?: { challengeId?: string; factorId?: string }) => {
+      if (!mfaChallenge && !options?.challengeId) {
+        throw new Error("No hay un desafío MFA activo");
+      }
+
+      if (!pendingCredentials) {
+        throw new Error("Faltan las credenciales base para completar el reto MFA");
+      }
+
+      setMfaCode(code);
+
+      return login({
+        ...pendingCredentials,
+        challengeId: options?.challengeId ?? mfaChallenge?.challengeId ?? "",
+        mfaCode: code,
+        factorId: options?.factorId ?? mfaChallenge?.factor?.id
+      });
+    },
+    [login, mfaChallenge, pendingCredentials]
   );
 
   const logout = useCallback(async () => {
@@ -117,7 +149,10 @@ export function useAuth() {
     isAuthenticated: Boolean(user),
     mfaRequired: Boolean(mfaChallenge),
     mfaChallenge,
+    mfaCode,
     login,
+    submitMfaCode,
+    setMfaCode,
     logout,
     getUser
   };

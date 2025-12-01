@@ -2,15 +2,18 @@
 
 import { createContext, useContext } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import type { AuthMfaChallenge, AuthUser } from "@/types/auth";
+import type { AuthMfaRequiredResponse, AuthUser } from "@/types/auth";
 
 interface AuthContextValue {
   user?: AuthUser;
   initializing: boolean;
   isAuthenticated: boolean;
   mfaRequired: boolean;
-  mfaChallenge: AuthMfaChallenge | null;
+  mfaChallenge: AuthMfaRequiredResponse | null;
+  mfaCode: string;
   login: ReturnType<typeof useAuth>["login"];
+  submitMfaCode: ReturnType<typeof useAuth>["submitMfaCode"];
+  setMfaCode: ReturnType<typeof useAuth>["setMfaCode"];
   logout: ReturnType<typeof useAuth>["logout"];
   getUser: ReturnType<typeof useAuth>["getUser"];
 }

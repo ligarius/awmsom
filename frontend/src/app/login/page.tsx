@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,16 +10,15 @@ import { toast } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
 
 export default function LoginPage() {
-  const { login, mfaChallenge, mfaRequired } = useAuthContext();
+  const { login, submitMfaCode, mfaChallenge, mfaRequired, mfaCode, setMfaCode } = useAuthContext();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [tenantId, setTenantId] = useState("");
   const [challengeId, setChallengeId] = useState("");
-  const [mfaCode, setMfaCode] = useState("");
   const [factorId, setFactorId] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const isMfaStep = Boolean(mfaChallenge || mfaRequired);
+  const isMfaStep = useMemo(() => Boolean(mfaChallenge || mfaRequired), [mfaChallenge, mfaRequired]);
 
   useEffect(() => {
     if (mfaChallenge?.challengeId) {
@@ -28,21 +27,24 @@ export default function LoginPage() {
     if (mfaChallenge?.factor?.id) {
       setFactorId(mfaChallenge.factor.id);
     }
-    if (mfaChallenge?.user?.tenantId && !tenantId) {
-      setTenantId(mfaChallenge.user.tenantId);
-    }
-  }, [mfaChallenge, tenantId]);
+  }, [mfaChallenge]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setLoading(true);
     try {
+      if (isMfaStep) {
+        await submitMfaCode(mfaCode, {
+          challengeId: challengeId || mfaChallenge?.challengeId,
+          factorId: factorId || mfaChallenge?.factor?.id
+        });
+        return;
+      }
+
       const response = await login({
         email,
         password,
         tenantId,
-        challengeId: challengeId || undefined,
-        mfaCode: mfaCode || undefined,
         factorId: factorId || undefined
       });
 
