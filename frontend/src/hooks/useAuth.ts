@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUserStore } from "@/store/user.store";
-import type { AuthCredentials, AuthMfaRequiredResponse, AuthResponse, AuthUser } from "@/types/auth";
+import type {
+  AuthCredentials,
+  AuthMfaRequiredResponse,
+  AuthResponse,
+  AuthUser,
+  OAuthStartPayload,
+  OAuthStartResponse
+} from "@/types/auth";
 import { toast } from "@/components/ui/use-toast";
 
 /**
@@ -136,6 +143,27 @@ export function useAuth() {
     [login, mfaChallenge, pendingCredentials]
   );
 
+  const startOAuth = useCallback(async ({ provider = "oidc-demo", tenantId, redirectUri }: OAuthStartPayload) => {
+    if (!tenantId) {
+      throw new Error("Tenant requerido para iniciar OAuth");
+    }
+
+    const response = await fetch("/api/auth/oauth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, tenantId, redirectUri }),
+      credentials: "include"
+    });
+
+    const data = (await response.json()) as OAuthStartResponse;
+
+    if (!response.ok || !data.redirectUrl) {
+      throw new Error(data?.message ?? "No pudimos iniciar la redirección OAuth");
+    }
+
+    return data.redirectUrl;
+  }, []);
+
   const logout = useCallback(async () => {
     await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
     setMfaChallenge(null);
@@ -154,6 +182,7 @@ export function useAuth() {
     submitMfaCode,
     setMfaCode,
     logout,
+    startOAuth,
     getUser
   };
 }
