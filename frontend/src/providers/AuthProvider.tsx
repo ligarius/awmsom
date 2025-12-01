@@ -16,6 +16,7 @@ interface AuthContextValue {
   setMfaCode: ReturnType<typeof useAuth>["setMfaCode"];
   logout: ReturnType<typeof useAuth>["logout"];
   getUser: ReturnType<typeof useAuth>["getUser"];
+  startOAuth: ReturnType<typeof useAuth>["startOAuth"];
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
