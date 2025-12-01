@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -7,6 +7,7 @@ import { MfaEnrollDto } from './dto/mfa-enroll.dto';
 import { VerifyMfaDto } from './dto/verify-mfa.dto';
 import { OAuthLoginDto } from './dto/oauth-login.dto';
 import { AuthUserGuard } from './guards/auth-user.guard';
+import { Response } from 'express';
 
 @Controller('auth')
 export class AuthController {
@@ -25,6 +26,17 @@ export class AuthController {
   @Post('login/oauth')
   oauthLogin(@Body() dto: OAuthLoginDto) {
     return this.authService.oauthLogin(dto);
+  }
+
+  @Get('oauth/authorize')
+  async oauthAuthorize(
+    @Query('provider') provider = 'oidc-demo',
+    @Query('tenantId') tenantId: string,
+    @Query('redirect_uri') redirectUri: string,
+    @Res() res: Response,
+  ) {
+    const authorizeUrl = await this.authService.buildOAuthAuthorizeUrl(provider, tenantId, redirectUri);
+    return res.redirect(authorizeUrl);
   }
 
   @Post('register')
