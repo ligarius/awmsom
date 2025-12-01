@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   }
   const nextResponse = NextResponse.json(data);
 
-  if (!data.mfaRequired && data.accessToken) {
+  if (data.accessToken) {
     nextResponse.cookies.set(AUTH_TOKEN_COOKIE, data.accessToken, {
       httpOnly: true,
       sameSite: "lax",
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     });
   }
 
-  if (!data.mfaRequired && data.refreshToken) {
+  if (data.refreshToken) {
     nextResponse.cookies.set(AUTH_REFRESH_COOKIE, data.refreshToken, {
       httpOnly: true,
       sameSite: "lax",
