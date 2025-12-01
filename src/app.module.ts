@@ -36,6 +36,7 @@ import { SchedulerModule } from './modules/scheduler/scheduler.module';
 import { ReplenishmentModule } from './modules/replenishment/replenishment.module';
 import { SlottingModule } from './modules/slotting/slotting.module';
 import { WavesModule } from './modules/waves/waves.module';
+import { ComplianceModule } from './modules/compliance/compliance.module';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { WavesModule } from './modules/waves/waves.module';
     ReplenishmentModule,
     SlottingModule,
     WavesModule,
+    ComplianceModule,
   ],
   providers: [
     RateLimitService,
