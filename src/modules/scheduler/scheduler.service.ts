@@ -10,6 +10,14 @@ export class SchedulerService {
 
   constructor(private readonly queues: QueuesService, private readonly prisma: PrismaService) {}
 
+  private resolveRetentionDays(candidate?: number) {
+    const parsed = Number(candidate ?? process.env.AUDIT_LOG_RETENTION_DAYS ?? 365);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+    return 365;
+  }
+
   @Cron('0 2 * * *')
   async enqueueInventorySnapshots() {
     const tenants = await this.prisma.tenant.findMany({ where: { isActive: true } });
@@ -42,10 +50,16 @@ export class SchedulerService {
 
   @Cron(CronExpression.EVERY_WEEKEND)
   async enqueueMaintenance() {
-    const tenants = await this.prisma.tenant.findMany({ where: { isActive: true } });
+    const tenants = await this.prisma.tenant.findMany({
+      where: { isActive: true },
+      include: { complianceSetting: true },
+    });
     await Promise.all(
       tenants.map((tenant) =>
-        this.queues.enqueueMaintenanceJob(tenant.id, { action: 'cleanup-audit-logs', olderThanDays: 365 }),
+        this.queues.enqueueMaintenanceJob(tenant.id, {
+          action: 'cleanup-audit-logs',
+          olderThanDays: this.resolveRetentionDays(tenant.complianceSetting?.retentionDays),
+        }),
       ),
     );
     this.logger.log(`Scheduled maintenance jobs for ${tenants.length} tenants`);
@@ -53,13 +67,15 @@ export class SchedulerService {
 
   @Cron(CronExpression.EVERY_DAY_AT_1AM)
   async enqueueExpiredAuditLogPurge() {
-    const tenants = await this.prisma.tenant.findMany({ where: { isActive: true } });
-    const retentionDays = Number(process.env.AUDIT_LOG_RETENTION_DAYS ?? 365);
+    const tenants = await this.prisma.tenant.findMany({
+      where: { isActive: true },
+      include: { complianceSetting: true },
+    });
     await Promise.all(
       tenants.map((tenant) =>
         this.queues.enqueueMaintenanceJob(tenant.id, {
           action: 'purge-expired-audit-logs',
-          olderThanDays: Number.isFinite(retentionDays) && retentionDays > 0 ? retentionDays : 365,
+          olderThanDays: this.resolveRetentionDays(tenant.complianceSetting?.retentionDays),
         }),
       ),
     );
