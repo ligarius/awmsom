@@ -37,3 +37,14 @@ export interface MfaFactor {
   type: string;
   channelHint?: string;
 }
+
+export interface OAuthStartPayload {
+  provider?: string;
+  tenantId: string;
+  redirectUri?: string;
+}
+
+export interface OAuthStartResponse {
+  redirectUrl: string;
+  message?: string;
+}
