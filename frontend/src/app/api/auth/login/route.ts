@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { AUTH_TOKEN_COOKIE, AUTH_REFRESH_COOKIE, API_BASE_URL } from "@/lib/constants";
-import type { AuthResponse } from "@/types/auth";
+import type { AuthCredentials, AuthResponse } from "@/types/auth";
 
 export async function POST(request: Request) {
-  const credentials = await request.json();
+  const credentials = (await request.json()) as AuthCredentials;
 
   const response = await fetch(`${API_BASE_URL}/auth/login`, {
     method: "POST",
@@ -11,14 +11,15 @@ export async function POST(request: Request) {
     body: JSON.stringify(credentials)
   });
 
-  if (!response.ok) {
-    return NextResponse.json({ message: "Credenciales inválidas" }, { status: response.status });
-  }
-
   const data = (await response.json()) as AuthResponse;
+
+  if (!response.ok) {
+    const message = (data as { message?: string })?.message ?? "Credenciales inválidas";
+    return NextResponse.json({ message }, { status: response.status });
+  }
   const nextResponse = NextResponse.json(data);
 
-  if (data.accessToken) {
+  if (!data.mfaRequired && data.accessToken) {
     nextResponse.cookies.set(AUTH_TOKEN_COOKIE, data.accessToken, {
       httpOnly: true,
       sameSite: "lax",
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
     });
   }
 
-  if (data.refreshToken) {
+  if (!data.mfaRequired && data.refreshToken) {
     nextResponse.cookies.set(AUTH_REFRESH_COOKIE, data.refreshToken, {
       httpOnly: true,
       sameSite: "lax",

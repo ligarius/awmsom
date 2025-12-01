@@ -1,12 +1,19 @@
 export interface AuthCredentials {
   email: string;
   password: string;
+  tenantId: string;
+  challengeId?: string;
+  mfaCode?: string;
+  factorId?: string;
 }
 
 export interface AuthResponse {
-  accessToken: string;
+  accessToken?: string;
   refreshToken?: string;
-  user: AuthUser;
+  user?: AuthUser;
+  mfaRequired?: boolean;
+  challengeId?: string;
+  factor?: MfaFactor;
 }
 
 export interface AuthUser {
@@ -17,4 +24,10 @@ export interface AuthUser {
   tenantId?: string;
   role?: string;
   permissions?: string[];
+}
+
+export interface MfaFactor {
+  id: string;
+  type: string;
+  channelHint?: string;
 }

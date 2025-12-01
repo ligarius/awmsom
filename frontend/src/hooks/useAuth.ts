@@ -43,16 +43,31 @@ export function useAuth() {
           body: JSON.stringify(credentials),
           credentials: "include"
         });
+        const data = (await response.json()) as AuthResponse & { message?: string };
+
         if (!response.ok) {
-          throw new Error("Credenciales inválidas o servicio no disponible");
+          throw new Error(data?.message ?? "Credenciales inválidas o servicio no disponible");
         }
-        const data = (await response.json()) as AuthResponse;
+
+        if (data.mfaRequired) {
+          toast({
+            title: "Se requiere verificación MFA",
+            description: "Ingresa el código enviado para completar el acceso"
+          });
+          return data;
+        }
+
+        if (!data.user) {
+          throw new Error("Respuesta de autenticación incompleta");
+        }
+
         setUser(data.user);
         toast({
           title: "Bienvenido",
           description: `${data.user.fullName} listo para operar`
         });
         router.replace("/dashboard");
+        return data;
       } catch (error) {
         toast({
           title: "No pudimos iniciar sesión",
