@@ -13,13 +13,32 @@ export default function LoginPage() {
   const { login } = useAuthContext();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [tenantId, setTenantId] = useState("");
+  const [challengeId, setChallengeId] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
+  const [factorId, setFactorId] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setLoading(true);
     try {
-      await login({ email, password });
+      const response = await login({
+        email,
+        password,
+        tenantId,
+        challengeId: challengeId || undefined,
+        mfaCode: mfaCode || undefined,
+        factorId: factorId || undefined
+      });
+
+      if (response?.mfaRequired && response.challengeId) {
+        setChallengeId(response.challengeId);
+        toast({
+          title: "Código MFA requerido",
+          description: "Ingresa el código recibido y vuelve a enviar el formulario"
+        });
+      }
     } catch (error) {
       toast({
         title: "Error al iniciar sesión",
@@ -56,6 +75,17 @@ export default function LoginPage() {
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="tenantId">Tenant</Label>
+              <Input
+                id="tenantId"
+                type="text"
+                required
+                value={tenantId}
+                onChange={(e) => setTenantId(e.target.value)}
+                placeholder="ID del tenant"
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="password">Contraseña</Label>
               <Input
                 id="password"
@@ -64,6 +94,36 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="mfaCode">Código MFA (si aplica)</Label>
+              <Input
+                id="mfaCode"
+                type="text"
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value)}
+                placeholder="Introduce el código temporal"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="challengeId">Challenge ID (si aplica)</Label>
+              <Input
+                id="challengeId"
+                type="text"
+                value={challengeId}
+                onChange={(e) => setChallengeId(e.target.value)}
+                placeholder="challenge-id"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="factorId">Factor ID preferido (opcional)</Label>
+              <Input
+                id="factorId"
+                type="text"
+                value={factorId}
+                onChange={(e) => setFactorId(e.target.value)}
+                placeholder="factor-id"
               />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
