@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { toast } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
 
 export default function LoginPage() {
-  const { login } = useAuthContext();
+  const { login, mfaChallenge, mfaRequired } = useAuthContext();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [tenantId, setTenantId] = useState("");
@@ -18,6 +18,12 @@ export default function LoginPage() {
   const [mfaCode, setMfaCode] = useState("");
   const [factorId, setFactorId] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (mfaChallenge?.challengeId) {
+      setChallengeId(mfaChallenge.challengeId);
+    }
+  }, [mfaChallenge]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -126,6 +132,12 @@ export default function LoginPage() {
                 placeholder="factor-id"
               />
             </div>
+            {mfaRequired && (
+              <p className="text-sm text-amber-600">
+                Verifica tu identidad con el código enviado. Challenge ID: {challengeId}
+                {mfaChallenge?.factor?.channelHint ? ` (${mfaChallenge.factor.channelHint})` : ""}.
+              </p>
+            )}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Ingresar"}
             </Button>

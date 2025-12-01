@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUserStore } from "@/store/user.store";
-import type { AuthCredentials, AuthResponse, AuthUser } from "@/types/auth";
+import type { AuthCredentials, AuthMfaChallenge, AuthResponse, AuthUser } from "@/types/auth";
 import { toast } from "@/components/ui/use-toast";
 
 /**
@@ -16,6 +16,7 @@ export function useAuth() {
   const router = useRouter();
   const { user, setUser, clear } = useUserStore();
   const [initializing, setInitializing] = useState(true);
+  const [mfaChallenge, setMfaChallenge] = useState<AuthMfaChallenge | null>(null);
 
   const getUser = useCallback(async () => {
     try {
@@ -50,6 +51,7 @@ export function useAuth() {
         }
 
         if (data.mfaRequired) {
+          setMfaChallenge(data);
           toast({
             title: "Se requiere verificación MFA",
             description: "Ingresa el código enviado para completar el acceso"
@@ -61,6 +63,7 @@ export function useAuth() {
           throw new Error("Respuesta de autenticación incompleta");
         }
 
+        setMfaChallenge(null);
         setUser(data.user);
         toast({
           title: "Bienvenido",
@@ -77,19 +80,22 @@ export function useAuth() {
         throw error;
       }
     },
-    [router, setUser]
+    [router, setMfaChallenge, setUser]
   );
 
   const logout = useCallback(async () => {
     await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+    setMfaChallenge(null);
     clear();
     router.replace("/login");
-  }, [clear, router]);
+  }, [clear, router, setMfaChallenge]);
 
   return {
     user,
     initializing,
     isAuthenticated: Boolean(user),
+    mfaRequired: Boolean(mfaChallenge),
+    mfaChallenge,
     login,
     logout,
     getUser
