@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -6,6 +6,7 @@ import { UpdateCredentialsDto } from './dto/update-credentials.dto';
 import { MfaEnrollDto } from './dto/mfa-enroll.dto';
 import { VerifyMfaDto } from './dto/verify-mfa.dto';
 import { OAuthLoginDto } from './dto/oauth-login.dto';
+import { AuthUserGuard } from './guards/auth-user.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -39,6 +40,12 @@ export class AuthController {
   @Post('mfa/verify')
   verifyMfa(@Body() dto: VerifyMfaDto) {
     return this.authService.verifyMfa(dto);
+  }
+
+  @UseGuards(AuthUserGuard)
+  @Get('me')
+  me(@Req() req: any) {
+    return this.authService.getAuthenticatedUser(req.headers.authorization, req.user);
   }
 
   @Get('tenants/:tenantId/users')
