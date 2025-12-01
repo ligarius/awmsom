@@ -47,7 +47,10 @@ Esta tabla resume el estado de los sprints del WMS, los objetivos principales y 
    - Evidencias y artefactos: casos automatizados en [`test/traceability/traceability.service.spec.ts`](../test/traceability/traceability.service.spec.ts); runbook de investigación en [`docs/runbooks/traceability-investigation.md`](runbooks/traceability-investigation.md); dashboard operativo en [`docs/dashboards/traceability.md`](dashboards/traceability.md).
 
 ## Sprints en progreso
-- Ninguno; el backlog relevante está priorizado y planificado.
+1. **Sprint 11 – Integración operativa y frontend**
+   - Objetivos: conectar el panel Next.js con los flujos críticos de inbound/outbound, exponer KPIs operativos y reforzar autenticación OAuth.
+   - Historias activas: login y refresco de sesión, creación/confirmación de recibos desde UI, liberación de órdenes y generación de picking con feedback de stock, tablero de KPIs con métricas de recibos abiertos y tareas pendientes.
+   - Dependencias y artefactos: variables `NEXT_PUBLIC_API_URL`/`NEXT_PUBLIC_OAUTH_AUTHORIZE_URL` configuradas; contratos de API alineados con DTOs en `frontend/src/types`; plan detallado en [`docs/sprint-fe.md`](sprint-fe.md).
 
 ## Sprints pendientes
  - Ninguno; el backlog relevante está priorizado y planificado.
