@@ -21,11 +21,24 @@ AWMSOM es una base para un WMS modular escrito en NestJS y TypeScript con un fro
 - **Catálogos y salud**: módulos de productos, ubicaciones, almacenes y endpoints `/health` para validar disponibilidad.
 
 ## Configuración de entorno
-Crea un archivo `.env` en la raíz del backend con las variables mínimas:
+Crea un archivo `.env` en la raíz del backend con las variables mínimas (ver `configuration/env.sample` para más detalles):
 ```bash
-DATABASE_URL="postgresql://user:pass@localhost:5432/awmsom"
+# Claves críticas
+JWT_SECRET="please-change-me-to-a-strong-random-secret-at-least-32-chars"
+TOTP_ENCRYPTION_KEY="changemechangemechangemechangeme"
 AUDIT_LOG_ENCRYPTION_KEY="<cadena_base64_32_bytes>"
+
+# Persistencia y Redis
+DATABASE_URL="postgresql://user:pass@localhost:5432/awmsom"
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_DB=0
+
+# Retención y umbrales con valores por defecto opcionales
 AUDIT_LOG_RETENTION_DAYS=365
+RBAC_EXCESSIVE_PERMISSION_THRESHOLD=20
+KPIS_CACHE_TTL=300
+TRACE_CACHE_TTL=120
 ```
 Frontend (carpeta `frontend/`) lee variables públicas para apuntar al backend y OAuth:
 ```bash
