@@ -37,10 +37,14 @@ import { ReplenishmentModule } from './modules/replenishment/replenishment.modul
 import { SlottingModule } from './modules/slotting/slotting.module';
 import { WavesModule } from './modules/waves/waves.module';
 import { ComplianceModule } from './modules/compliance/compliance.module';
+import { configValidationSchema } from './config/validation';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validationSchema: configValidationSchema,
+    }),
     PrismaModule,
     AuthModule,
     UsersModule,
