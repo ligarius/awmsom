@@ -2,12 +2,14 @@
 
 import { createContext, useContext } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import type { AuthUser } from "@/types/auth";
+import type { AuthMfaChallenge, AuthUser } from "@/types/auth";
 
 interface AuthContextValue {
   user?: AuthUser;
   initializing: boolean;
   isAuthenticated: boolean;
+  mfaRequired: boolean;
+  mfaChallenge: AuthMfaChallenge | null;
   login: ReturnType<typeof useAuth>["login"];
   logout: ReturnType<typeof useAuth>["logout"];
   getUser: ReturnType<typeof useAuth>["getUser"];

@@ -7,13 +7,22 @@ export interface AuthCredentials {
   factorId?: string;
 }
 
-export interface AuthResponse {
+export type AuthResponse = AuthSuccessResponse | AuthMfaChallenge;
+
+export interface AuthSuccessResponse {
+  accessToken: string;
+  refreshToken?: string;
+  user: AuthUser;
+  mfaRequired?: false;
+}
+
+export interface AuthMfaChallenge {
+  mfaRequired: true;
+  challengeId: string;
+  factor?: MfaFactor;
   accessToken?: string;
   refreshToken?: string;
   user?: AuthUser;
-  mfaRequired?: boolean;
-  challengeId?: string;
-  factor?: MfaFactor;
 }
 
 export interface AuthUser {
