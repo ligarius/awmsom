@@ -254,6 +254,69 @@ export class AuthService {
     };
   }
 
+  async getAuthenticatedUser(authorization?: string, cachedUser?: any) {
+    if (cachedUser) {
+      return cachedUser;
+    }
+
+    if (!authorization || !authorization.toLowerCase().startsWith('bearer ')) {
+      throw new UnauthorizedException('Missing bearer token');
+    }
+
+    const token = authorization.substring('bearer '.length).trim();
+
+    if (!token) {
+      throw new UnauthorizedException('Missing bearer token');
+    }
+
+    let payload: any;
+    try {
+      payload = jwt.verify(token, this.jwtSecret);
+    } catch (error) {
+      throw new UnauthorizedException('Invalid token');
+    }
+
+    if (!payload?.sub || !payload?.tenantId) {
+      throw new UnauthorizedException('Invalid token payload');
+    }
+
+    const prisma = this.prisma as any;
+    const user = await prisma.user.findUnique({ where: { id: payload.sub } });
+
+    if (!user || user.tenantId !== payload.tenantId) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (!user.isActive) {
+      throw new UnauthorizedException('User inactive');
+    }
+
+    const roleAssignments = prisma.userRole?.findMany
+      ? await prisma.userRole.findMany({ where: { userId: user.id }, include: { role: true } })
+      : [];
+    const permissions = await this.rbacService.getUserPermissions(user.tenantId, user.id);
+
+    const roles = roleAssignments.map((assignment: any) => assignment.role?.name ?? assignment.roleId);
+    const permissionList = permissions.map((permission: any) =>
+      typeof permission === 'string' ? permission : `${permission.resource}:${permission.action}`,
+    );
+
+    const tenant = prisma.tenant?.findUnique
+      ? await prisma.tenant.findUnique({ where: { id: user.tenantId } })
+      : null;
+
+    return {
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName ?? user.email,
+      tenant: tenant?.name ?? tenant?.code,
+      tenantId: user.tenantId,
+      role: roles[0],
+      roles,
+      permissions: permissionList,
+    };
+  }
+
   private async upsertChallenge(user: any, factor: any) {
     const prisma = this.prisma as any;
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
