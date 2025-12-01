@@ -26,5 +26,6 @@ export const APP_SECTIONS = [
   { label: "Slotting", href: "/slotting", icon: "grid" },
   { label: "Trazabilidad", href: "/traceability", icon: "route" },
   { label: "Reportes", href: "/reports", icon: "file-chart-column" },
+  { label: "Cumplimiento", href: "/settings/compliance", icon: "shield-check" },
   { label: "Configuración", href: "/settings", icon: "settings" }
 ];
