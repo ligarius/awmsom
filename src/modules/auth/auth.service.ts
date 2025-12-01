@@ -494,6 +494,52 @@ export class AuthService {
     return { secret, audience };
   }
 
+  private getProviderAuthorizeUrl(provider: string) {
+    const key = this.normalizeProviderKey(provider);
+    const authorizeUrl = process.env[`OAUTH_${key}_AUTHORIZE_URL`];
+
+    if (!authorizeUrl) {
+      console.warn(`OAuth provider ${provider} is not configured with an authorize URL`);
+      throw new UnauthorizedException('OAuth provider misconfigured');
+    }
+
+    return authorizeUrl;
+  }
+
+  async buildOAuthAuthorizeUrl(provider: string, tenantId?: string, redirectUri?: string) {
+    if (!tenantId) {
+      throw new BadRequestException('Tenant is required');
+    }
+
+    if (!redirectUri) {
+      throw new BadRequestException('redirect_uri is required');
+    }
+
+    const prisma = this.prisma as any;
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found');
+    }
+    if (!tenant.isActive) {
+      throw new UnauthorizedException('Tenant inactive');
+    }
+
+    const authorizeBase = this.getProviderAuthorizeUrl(provider);
+    let url: URL;
+    try {
+      url = new URL(authorizeBase);
+    } catch (error) {
+      console.warn(`Invalid authorize URL for provider ${provider}:`, error?.message ?? error);
+      throw new BadRequestException('Invalid provider authorize URL');
+    }
+
+    url.searchParams.set('redirect_uri', redirectUri);
+    url.searchParams.set('provider', provider);
+    url.searchParams.set('tenantId', tenantId);
+
+    return url.toString();
+  }
+
   private verifyProviderToken(provider: string, tokens: { idToken?: string; accessToken?: string }, expectedSub: string) {
     const token = tokens.idToken ?? tokens.accessToken;
 

@@ -114,6 +114,7 @@ describe('Auth module', () => {
     userAccountService = new UserAccountService(prisma as any);
     process.env.OAUTH_OIDC_DEMO_SECRET = providerSecret;
     process.env.OAUTH_OIDC_DEMO_AUDIENCE = providerAudience;
+    process.env.OAUTH_OIDC_DEMO_AUTHORIZE_URL = 'https://oidc-demo.example.com/authorize';
     process.env.TOTP_ENCRYPTION_KEY = '12345678901234567890123456789012';
     authService = new AuthService(prisma as any, undefined as any, userAccountService as any);
   });
@@ -387,6 +388,34 @@ describe('Auth module', () => {
     await expect(
       authService.enrollFactor({ userId: user.id, tenantId: tenant.id, type: 'totp', label: 'auth-app' }),
     ).rejects.toThrow('TOTP encryption key is too weak');
+  });
+
+  it('builds an OAuth authorize URL after validating tenant and parameters', async () => {
+    const tenant = prisma.tenant.create({ data: { name: 'Tenant', code: 'T-OAUTH-AUTHZ', plan: 'pro' } });
+
+    const url = await authService.buildOAuthAuthorizeUrl(
+      'oidc-demo',
+      tenant.id,
+      'https://app.example.com/oauth/callback',
+    );
+
+    expect(url).toContain('https://oidc-demo.example.com/authorize');
+    expect(url).toContain('redirect_uri=https%3A%2F%2Fapp.example.com%2Foauth%2Fcallback');
+    expect(url).toContain(`tenantId=${encodeURIComponent(tenant.id)}`);
+    expect(url).toContain('provider=oidc-demo');
+  });
+
+  it('rejects OAuth authorize requests for missing provider configuration or tenant', async () => {
+    await expect(
+      authService.buildOAuthAuthorizeUrl('oidc-demo', 'missing-tenant', 'https://app.example.com/oauth/callback'),
+    ).rejects.toThrow('Tenant not found');
+
+    const tenant = prisma.tenant.create({ data: { name: 'Tenant', code: 'T-OAUTH-AUTHZ2', plan: 'pro' } });
+    delete process.env.OAUTH_OIDC_DEMO_AUTHORIZE_URL;
+
+    await expect(
+      authService.buildOAuthAuthorizeUrl('oidc-demo', tenant.id, 'https://app.example.com/oauth/callback'),
+    ).rejects.toThrow('OAuth provider misconfigured');
   });
 
   it('supports logging in via OAuth provider mapping identities to users', async () => {
