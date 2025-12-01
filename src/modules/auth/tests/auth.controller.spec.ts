@@ -13,6 +13,7 @@ describe('AuthController routes', () => {
       enrollFactor: jest.fn(),
       verifyMfa: jest.fn(),
       register: jest.fn(),
+      getAuthenticatedUser: jest.fn(),
       listUsers: jest.fn(),
       findUser: jest.fn(),
       updateCredentials: jest.fn(),
@@ -43,5 +44,15 @@ describe('AuthController routes', () => {
     expect(service.deleteUser).toHaveBeenCalledWith('2');
     expect(deactivated.isActive).toBe(false);
     expect(deleted.id).toBe('2');
+  });
+
+  it('returns the authenticated user for /auth/me', async () => {
+    const user = { id: '1', email: 'user@example.com', tenantId: 't1', fullName: 'User', roles: [] } as any;
+    service.getAuthenticatedUser.mockResolvedValueOnce(user);
+
+    const result = await controller.me({ headers: { authorization: 'Bearer token' }, user } as any);
+
+    expect(service.getAuthenticatedUser).toHaveBeenCalledWith('Bearer token', user);
+    expect(result).toEqual(user);
   });
 });
