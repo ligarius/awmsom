@@ -10,6 +10,7 @@ describe('AuthController routes', () => {
       health: jest.fn(),
       login: jest.fn(),
       oauthLogin: jest.fn(),
+      buildOAuthAuthorizeUrl: jest.fn(),
       enrollFactor: jest.fn(),
       verifyMfa: jest.fn(),
       register: jest.fn(),
