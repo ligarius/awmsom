@@ -17,6 +17,10 @@ export async function POST(request: Request) {
     const message = (data as { message?: string })?.message ?? "Credenciales inválidas";
     return NextResponse.json({ message }, { status: response.status });
   }
+  if (data.mfaRequired) {
+    return NextResponse.json(data);
+  }
+
   const nextResponse = NextResponse.json(data);
 
   if (data.accessToken) {
