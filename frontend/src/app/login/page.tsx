@@ -191,8 +191,9 @@ export default function LoginPage() {
               {oauthLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Continuar con OAuth2"}
             </Button>
             <p className="text-xs text-muted-foreground">
-              Consejo: aquí se conectará el endpoint real POST /auth/login. En los sprints posteriores añadiremos recuperación de
-              contraseña, MFA y selección de tenant.
+              Flujo seguro: completa email, contraseña y tenant, luego verifica el código MFA si tu factor está activo. También
+              puedes acceder con OAuth2 (OIDC) usando tu tenant antes de redirigir al proveedor. Conservamos el JWT en cookie
+              HttpOnly y memoria para seguir las guías de seguridad del sprint.
             </p>
           </form>
         </CardContent>

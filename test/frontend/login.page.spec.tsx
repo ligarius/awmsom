@@ -68,4 +68,13 @@ describe("LoginPage OAuth button", () => {
       );
     });
   });
+
+  it("renders the secure login guidance copy to avoid regressions", () => {
+    render(<LoginPage />);
+
+    expect(screen.getByText(/Flujo seguro: completa email, contraseña y tenant/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/puedes acceder con OAuth2 \(OIDC\) usando tu tenant antes de redirigir al proveedor/i)
+    ).toBeInTheDocument();
+  });
 });
