@@ -15,6 +15,7 @@ module.exports = {
     '^@prisma/client$': '<rootDir>/test/mocks/prisma-client',
     '^next/server$': '<rootDir>/test/mocks/next-server',
     '^next/headers$': '<rootDir>/test/mocks/next-headers',
+    '^next/navigation$': '<rootDir>/test/mocks/next-navigation',
     '^tailwind-merge$': '<rootDir>/test/mocks/tailwind-merge',
     '^react$': '<rootDir>/node_modules/react',
     '^react-dom$': '<rootDir>/node_modules/react-dom',

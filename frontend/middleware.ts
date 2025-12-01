@@ -7,7 +7,8 @@ const protectedRoutes = ["/dashboard", "/inbound", "/outbound", "/inventory", "/
 const routePermissions: { prefix: string; permission?: string; role?: string }[] = [
   { prefix: "/saas", permission: "saas:access", role: "SUPER_ADMIN" },
   { prefix: "/settings/users", permission: "users:manage" },
-  { prefix: "/settings/roles", permission: "roles:manage" }
+  { prefix: "/settings/roles", permission: "roles:manage" },
+  { prefix: "/settings/compliance", permission: "compliance:manage" }
 ];
 
 const validationCache = new Map<string, { user: AuthUser | null; expiresAt: number }>();

@@ -42,6 +42,7 @@ export function usePermissions() {
   const canSlottingExecute = useMemo(() => hasPermission("SLOTTING_EXECUTE"), []);
   const canSlottingConfig = useMemo(() => hasPermission("SLOTTING_CONFIG"), []);
   const canInventoryAdvancedRead = useMemo(() => hasPermission("INVENTORY_ADVANCED_READ"), []);
+  const canManageCompliance = useMemo(() => hasPermission("compliance:manage") || hasRole("ADMIN"), []);
 
   return {
     canRead,
@@ -76,6 +77,7 @@ export function usePermissions() {
     canSlottingApprove,
     canSlottingExecute,
     canSlottingConfig,
-    canInventoryAdvancedRead
+    canInventoryAdvancedRead,
+    canManageCompliance
   };
 }
