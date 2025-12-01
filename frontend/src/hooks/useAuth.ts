@@ -17,6 +17,7 @@ export function useAuth() {
   const { user, setUser, clear } = useUserStore();
   const [initializing, setInitializing] = useState(true);
   const [mfaChallenge, setMfaChallenge] = useState<AuthMfaChallenge | null>(null);
+  const [lastTenantId, setLastTenantId] = useState<string | null>(null);
 
   const getUser = useCallback(async () => {
     try {
@@ -38,10 +39,24 @@ export function useAuth() {
   const login = useCallback(
     async (credentials: AuthCredentials) => {
       try {
+        const payload: AuthCredentials = {
+          ...credentials,
+          tenantId: credentials.tenantId || lastTenantId || mfaChallenge?.user?.tenantId || ""
+        };
+
+        if (payload.tenantId) {
+          setLastTenantId(payload.tenantId);
+        }
+
+        if (mfaChallenge) {
+          payload.challengeId = credentials.challengeId ?? mfaChallenge.challengeId;
+          payload.factorId = credentials.factorId ?? mfaChallenge.factor?.id;
+        }
+
         const response = await fetch("/api/auth/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(credentials),
+          body: JSON.stringify(payload),
           credentials: "include"
         });
         const data = (await response.json()) as AuthResponse & { message?: string };
@@ -56,6 +71,9 @@ export function useAuth() {
             title: "Se requiere verificación MFA",
             description: "Ingresa el código enviado para completar el acceso"
           });
+          if (data.user?.tenantId) {
+            setLastTenantId(data.user.tenantId);
+          }
           return data;
         }
 
@@ -64,6 +82,9 @@ export function useAuth() {
         }
 
         setMfaChallenge(null);
+        if (data.user.tenantId) {
+          setLastTenantId(data.user.tenantId);
+        }
         setUser(data.user);
         toast({
           title: "Bienvenido",
@@ -80,7 +101,7 @@ export function useAuth() {
         throw error;
       }
     },
-    [router, setMfaChallenge, setUser]
+    [lastTenantId, mfaChallenge, router, setLastTenantId, setMfaChallenge, setUser]
   );
 
   const logout = useCallback(async () => {

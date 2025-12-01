@@ -19,11 +19,19 @@ export default function LoginPage() {
   const [factorId, setFactorId] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const isMfaStep = Boolean(mfaChallenge || mfaRequired);
+
   useEffect(() => {
     if (mfaChallenge?.challengeId) {
       setChallengeId(mfaChallenge.challengeId);
     }
-  }, [mfaChallenge]);
+    if (mfaChallenge?.factor?.id) {
+      setFactorId(mfaChallenge.factor.id);
+    }
+    if (mfaChallenge?.user?.tenantId && !tenantId) {
+      setTenantId(mfaChallenge.user.tenantId);
+    }
+  }, [mfaChallenge, tenantId]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -102,41 +110,45 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="mfaCode">Código MFA (si aplica)</Label>
-              <Input
-                id="mfaCode"
-                type="text"
-                value={mfaCode}
-                onChange={(e) => setMfaCode(e.target.value)}
-                placeholder="Introduce el código temporal"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="challengeId">Challenge ID (si aplica)</Label>
-              <Input
-                id="challengeId"
-                type="text"
-                value={challengeId}
-                onChange={(e) => setChallengeId(e.target.value)}
-                placeholder="challenge-id"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="factorId">Factor ID preferido (opcional)</Label>
-              <Input
-                id="factorId"
-                type="text"
-                value={factorId}
-                onChange={(e) => setFactorId(e.target.value)}
-                placeholder="factor-id"
-              />
-            </div>
-            {mfaRequired && (
-              <p className="text-sm text-amber-600">
-                Verifica tu identidad con el código enviado. Challenge ID: {challengeId}
-                {mfaChallenge?.factor?.channelHint ? ` (${mfaChallenge.factor.channelHint})` : ""}.
-              </p>
+            {isMfaStep && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="mfaCode">Código MFA</Label>
+                  <Input
+                    id="mfaCode"
+                    type="text"
+                    required
+                    value={mfaCode}
+                    onChange={(e) => setMfaCode(e.target.value)}
+                    placeholder="Introduce el código temporal"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="challengeId">Challenge ID</Label>
+                  <Input
+                    id="challengeId"
+                    type="text"
+                    required
+                    value={challengeId}
+                    onChange={(e) => setChallengeId(e.target.value)}
+                    placeholder="challenge-id"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="factorId">Factor ID preferido</Label>
+                  <Input
+                    id="factorId"
+                    type="text"
+                    value={factorId}
+                    onChange={(e) => setFactorId(e.target.value)}
+                    placeholder="factor-id"
+                  />
+                </div>
+                <p className="text-sm text-amber-600">
+                  Verifica tu identidad con el código enviado. Challenge ID: {challengeId}
+                  {mfaChallenge?.factor?.channelHint ? ` (${mfaChallenge.factor.channelHint})` : ""}.
+                </p>
+              </>
             )}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Ingresar"}
