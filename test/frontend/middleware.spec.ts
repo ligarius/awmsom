@@ -127,4 +127,23 @@ describe("middleware authorization rules", () => {
       expect(response).toEqual({ type: "next" });
     });
   });
+
+  describe("/settings/compliance", () => {
+    const compliancePath = "/settings/compliance";
+
+    it("denies access without the compliance scope", async () => {
+      const token = encodeToken({ permissions: [] });
+      const response = await middleware(createRequest(compliancePath, token));
+
+      expect(response).toEqual(expect.objectContaining({ type: "redirect" }));
+      expect((response as { url: string }).url).toContain("/forbidden");
+    });
+
+    it("allows access with the compliance scope", async () => {
+      const token = encodeToken({ permissions: ["compliance:manage"] });
+      const response = await middleware(createRequest(compliancePath, token));
+
+      expect(response).toEqual({ type: "next" });
+    });
+  });
 });
