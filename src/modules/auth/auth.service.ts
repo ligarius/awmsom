@@ -506,13 +506,17 @@ export class AuthService {
     return authorizeUrl;
   }
 
-  async buildOAuthAuthorizeUrl(provider: string, tenantId?: string, redirectUri?: string) {
+  async buildOAuthAuthorizeUrl(provider: string, tenantId?: string, redirectUri?: string, state?: string, nonce?: string) {
     if (!tenantId) {
       throw new BadRequestException('Tenant is required');
     }
 
     if (!redirectUri) {
       throw new BadRequestException('redirect_uri is required');
+    }
+
+    if (!state) {
+      throw new BadRequestException('state is required');
     }
 
     const prisma = this.prisma as any;
@@ -536,6 +540,11 @@ export class AuthService {
     url.searchParams.set('redirect_uri', redirectUri);
     url.searchParams.set('provider', provider);
     url.searchParams.set('tenantId', tenantId);
+    url.searchParams.set('state', state);
+
+    if (nonce) {
+      url.searchParams.set('nonce', nonce);
+    }
 
     return url.toString();
   }
@@ -570,6 +579,11 @@ export class AuthService {
 
   async oauthLogin(dto: OAuthLoginDto) {
     const prisma = this.prisma as any;
+
+    if (!dto.state || !dto.expectedState || dto.state !== dto.expectedState) {
+      throw new UnauthorizedException('Invalid OAuth state');
+    }
+
     const tenant = await prisma.tenant.findUnique({ where: { id: dto.tenantId } });
     if (!tenant) {
       throw new NotFoundException('Tenant not found');
@@ -583,6 +597,10 @@ export class AuthService {
       { idToken: dto.idToken, accessToken: dto.accessToken },
       dto.providerUserId,
     );
+
+    if (dto.nonce && tokenPayload?.nonce && dto.nonce !== tokenPayload.nonce) {
+      throw new UnauthorizedException('Invalid OAuth nonce');
+    }
 
     const providerUserId = tokenPayload?.sub ?? dto.providerUserId;
     if (!providerUserId) {
