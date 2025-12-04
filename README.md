@@ -40,7 +40,7 @@ RBAC_EXCESSIVE_PERMISSION_THRESHOLD=20
 KPIS_CACHE_TTL=300
 TRACE_CACHE_TTL=120
 ```
-Frontend (carpeta `frontend/`) lee variables públicas para apuntar al backend y OAuth:
+Frontend (carpeta `frontend/`) debe crear `frontend/.env.local` (o definir variables de entorno) y pegar las variables públicas para apuntar al backend y OAuth. Ejemplo listo para copiar:
 ```bash
 NEXT_PUBLIC_API_URL="http://localhost:3000"
 NEXT_PUBLIC_OAUTH_AUTHORIZE_URL="http://localhost:3000/auth/oauth/authorize" # opcional si se delega en otro IdP
