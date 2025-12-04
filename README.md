@@ -79,6 +79,7 @@ OAUTH_OIDC_DEMO_AUDIENCE=awmsom-api
      npx prisma migrate deploy
      ```
    - Realiza copias de seguridad antes de resolver estados manualmente y valida el registro en la tabla `_prisma_migrations` para confirmar el estado actual de cada migración.
+   - Runbook detallado: [docs/runbooks/prisma-failed-migration.md](docs/runbooks/prisma-failed-migration.md).
 4. Ejecutar en modo desarrollo con recarga en caliente:
    ```bash
    npm run start:dev
