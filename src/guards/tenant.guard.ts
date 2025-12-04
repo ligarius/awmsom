@@ -1,4 +1,5 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
+import * as jwt from 'jsonwebtoken';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -18,16 +19,33 @@ export class TenantGuard implements CanActivate {
       return true;
     }
 
-    let user = request.user;
-    if (!user && request.headers?.authorization) {
-      const token = (request.headers.authorization as string).replace('Bearer ', '');
+    const jwtSecret = process.env.JWT_SECRET;
+
+    if (!request.user) {
+      const token = this.extractBearerToken(request) ?? this.extractCookieToken(request);
+
+      if (!token) {
+        throw new ForbiddenException('Authentication token required');
+      }
+
+      if (!jwtSecret) {
+        throw new ForbiddenException('JWT secret not configured');
+      }
+
       try {
-        user = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
-        request.user = user;
+        const payload = jwt.verify(token, jwtSecret) as jwt.JwtPayload;
+        request.user = {
+          id: payload.sub,
+          tenantId: payload.tenantId,
+          roles: payload.roles,
+          permissions: payload.permissions,
+        };
       } catch (error) {
         throw new ForbiddenException('Invalid authentication token');
       }
     }
+
+    const user = request.user;
 
     if (!user?.tenantId) {
       throw new ForbiddenException('Tenant is required');
@@ -41,5 +59,40 @@ export class TenantGuard implements CanActivate {
 
     request.tenantId = user.tenantId;
     return true;
+  }
+
+  private extractBearerToken(request: any): string | undefined {
+    const header = request.headers?.authorization ?? request.headers?.Authorization;
+    if (!header || typeof header !== 'string') {
+      return undefined;
+    }
+
+    const [scheme, value] = header.split(' ');
+    if (!value || scheme?.toLowerCase() !== 'bearer') {
+      return undefined;
+    }
+
+    return value.trim();
+  }
+
+  private extractCookieToken(request: any): string | undefined {
+    const tokenFromCookies = request.cookies?.awms_token ?? request.cookies?.AUTH_TOKEN_COOKIE;
+    if (tokenFromCookies) {
+      return tokenFromCookies;
+    }
+
+    const cookieHeader = request.headers?.cookie;
+    if (!cookieHeader || typeof cookieHeader !== 'string') {
+      return undefined;
+    }
+
+    const cookies = cookieHeader.split(';').map((cookie: string) => cookie.trim());
+    const tokenCookie = cookies.find((cookie) => cookie.startsWith('awms_token='));
+
+    if (!tokenCookie) {
+      return undefined;
+    }
+
+    return decodeURIComponent(tokenCookie.substring('awms_token='.length));
   }
 }
