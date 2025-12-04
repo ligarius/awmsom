@@ -33,9 +33,11 @@ export class AuthController {
     @Query('provider') provider = 'oidc-demo',
     @Query('tenantId') tenantId: string,
     @Query('redirect_uri') redirectUri: string,
+    @Query('state') state: string,
+    @Query('nonce') nonce: string,
     @Res() res: Response,
   ) {
-    const authorizeUrl = await this.authService.buildOAuthAuthorizeUrl(provider, tenantId, redirectUri);
+    const authorizeUrl = await this.authService.buildOAuthAuthorizeUrl(provider, tenantId, redirectUri, state, nonce);
     return res.redirect(authorizeUrl);
   }
 

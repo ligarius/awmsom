@@ -28,4 +28,16 @@ export class OAuthLoginDto {
   @IsOptional()
   @IsString()
   displayName?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  state!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  expectedState!: string;
+
+  @IsOptional()
+  @IsString()
+  nonce?: string;
 }
