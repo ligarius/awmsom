@@ -397,24 +397,40 @@ describe('Auth module', () => {
       'oidc-demo',
       tenant.id,
       'https://app.example.com/oauth/callback',
+      'state-123',
+      'nonce-123',
     );
 
     expect(url).toContain('https://oidc-demo.example.com/authorize');
     expect(url).toContain('redirect_uri=https%3A%2F%2Fapp.example.com%2Foauth%2Fcallback');
     expect(url).toContain(`tenantId=${encodeURIComponent(tenant.id)}`);
     expect(url).toContain('provider=oidc-demo');
+    expect(url).toContain('state=state-123');
+    expect(url).toContain('nonce=nonce-123');
   });
 
   it('rejects OAuth authorize requests for missing provider configuration or tenant', async () => {
     await expect(
-      authService.buildOAuthAuthorizeUrl('oidc-demo', 'missing-tenant', 'https://app.example.com/oauth/callback'),
+      authService.buildOAuthAuthorizeUrl(
+        'oidc-demo',
+        'missing-tenant',
+        'https://app.example.com/oauth/callback',
+        'state-123',
+        'nonce-123',
+      ),
     ).rejects.toThrow('Tenant not found');
 
     const tenant = prisma.tenant.create({ data: { name: 'Tenant', code: 'T-OAUTH-AUTHZ2', plan: 'pro' } });
     delete process.env.OAUTH_OIDC_DEMO_AUTHORIZE_URL;
 
     await expect(
-      authService.buildOAuthAuthorizeUrl('oidc-demo', tenant.id, 'https://app.example.com/oauth/callback'),
+      authService.buildOAuthAuthorizeUrl(
+        'oidc-demo',
+        tenant.id,
+        'https://app.example.com/oauth/callback',
+        'state-123',
+        'nonce-123',
+      ),
     ).rejects.toThrow('OAuth provider misconfigured');
   });
 
@@ -432,6 +448,9 @@ describe('Auth module', () => {
       providerUserId: 'abc-123',
       tenantId: tenant.id,
       idToken,
+      state: 'state-123',
+      expectedState: 'state-123',
+      nonce: 'nonce-123',
     });
 
     expect(firstLogin.accessToken).toBeDefined();
@@ -443,6 +462,9 @@ describe('Auth module', () => {
       providerUserId: 'abc-123',
       tenantId: tenant.id,
       idToken,
+      state: 'state-123',
+      expectedState: 'state-123',
+      nonce: 'nonce-123',
     });
 
     expect(secondLogin.accessToken).toBeDefined();
@@ -453,7 +475,13 @@ describe('Auth module', () => {
     const tenant = prisma.tenant.create({ data: { name: 'Tenant', code: 'T-OAUTH2', plan: 'pro' } });
 
     await expect(
-      authService.oauthLogin({ provider: 'oidc-demo', providerUserId: 'missing', tenantId: tenant.id }),
+      authService.oauthLogin({
+        provider: 'oidc-demo',
+        providerUserId: 'missing',
+        tenantId: tenant.id,
+        state: 'state-123',
+        expectedState: 'state-123',
+      }),
     ).rejects.toThrow('OAuth token is required');
 
     const mismatchedToken = jwt.sign({ sub: 'wrong', aud: providerAudience }, providerSecret, { expiresIn: '1h' });
@@ -464,8 +492,25 @@ describe('Auth module', () => {
         providerUserId: 'abc-123',
         tenantId: tenant.id,
         idToken: mismatchedToken,
+        state: 'state-123',
+        expectedState: 'state-123',
       }),
     ).rejects.toThrow('Invalid OAuth token');
+  });
+
+  it('rejects OAuth logins when state does not match', async () => {
+    const tenant = prisma.tenant.create({ data: { name: 'Tenant', code: 'T-OAUTH3', plan: 'pro' } });
+
+    await expect(
+      authService.oauthLogin({
+        provider: 'oidc-demo',
+        providerUserId: 'abc-123',
+        tenantId: tenant.id,
+        idToken: jwt.sign({ sub: 'abc-123', aud: providerAudience }, providerSecret),
+        state: 'state-123',
+        expectedState: 'different-state',
+      }),
+    ).rejects.toThrow('Invalid OAuth state');
   });
 
   it('rejects login for inactive tenants or users', async () => {
