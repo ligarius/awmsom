@@ -30,7 +30,13 @@ describe('/auth/oauth/authorize endpoint', () => {
 
     await request(app.getHttpServer())
       .get('/auth/oauth/authorize')
-      .query({ provider: 'oidc-demo', tenantId: 'tenant-1', redirect_uri: 'https://app.example.com/callback' })
+      .query({
+        provider: 'oidc-demo',
+        tenantId: 'tenant-1',
+        redirect_uri: 'https://app.example.com/callback',
+        state: 'state-123',
+        nonce: 'nonce-123',
+      })
       .expect(302)
       .expect('Location', 'https://provider.example.com/authz?provider=oidc-demo');
 
@@ -38,6 +44,8 @@ describe('/auth/oauth/authorize endpoint', () => {
       'oidc-demo',
       'tenant-1',
       'https://app.example.com/callback',
+      'state-123',
+      'nonce-123',
     );
   });
 
@@ -46,7 +54,13 @@ describe('/auth/oauth/authorize endpoint', () => {
 
     await request(app.getHttpServer())
       .get('/auth/oauth/authorize')
-      .query({ provider: 'oidc-demo', tenantId: 'missing-tenant', redirect_uri: 'https://app.example.com/callback' })
+      .query({
+        provider: 'oidc-demo',
+        tenantId: 'missing-tenant',
+        redirect_uri: 'https://app.example.com/callback',
+        state: 'state-123',
+        nonce: 'nonce-123',
+      })
       .expect(404);
   });
 });
