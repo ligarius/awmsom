@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { randomBytes } from 'crypto';
+import { randomBytes, timingSafeEqual } from 'crypto';
+import { genSalt, hash } from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateApiKeyDto } from './dto/create-api-key.dto';
@@ -13,14 +14,34 @@ export class ApiKeysService {
     return randomBytes(24).toString('hex');
   }
 
+  private async hashApiKey(key: string, salt?: string): Promise<string> {
+    if (salt) {
+      return hash(key, salt);
+    }
+    const generatedSalt = await genSalt(12);
+    return hash(key, generatedSalt);
+  }
+
+  private constantTimeMatch(a: string, b: string): boolean {
+    const bufferA = Buffer.from(a);
+    const bufferB = Buffer.from(b);
+    return bufferA.length === bufferB.length && timingSafeEqual(bufferA, bufferB);
+  }
+
+  private sanitizeApiKey<T extends { keyHash?: string }>(apiKey: T) {
+    const { keyHash, ...rest } = apiKey;
+    return rest;
+  }
+
   async createApiKey(tenantId: string, userId: string | null, dto: CreateApiKeyDto) {
     const key = this.generateApiKey();
+    const keyHash = await this.hashApiKey(key);
     const prisma = this.prisma as any;
     const apiKey = await prisma.apiKey.create({
       data: {
         tenantId,
         name: dto.name,
-        key,
+        keyHash,
         canRead: dto.canRead ?? true,
         canWrite: dto.canWrite ?? false,
       },
@@ -35,12 +56,24 @@ export class ApiKeysService {
       metadata: { name: apiKey.name },
     });
 
-    return apiKey;
+    return { ...this.sanitizeApiKey(apiKey), key };
   }
 
   listApiKeys(tenantId: string) {
     const prisma = this.prisma as any;
-    return prisma.apiKey.findMany({ where: { tenantId } });
+    return prisma.apiKey.findMany({
+      where: { tenantId },
+      select: {
+        id: true,
+        tenantId: true,
+        name: true,
+        isActive: true,
+        canRead: true,
+        canWrite: true,
+        createdAt: true,
+        revokedAt: true,
+      },
+    });
   }
 
   async updateApiKey(tenantId: string, id: string, dto: UpdateApiKeyDto) {
@@ -66,7 +99,7 @@ export class ApiKeysService {
       entityId: id,
       metadata: dto,
     });
-    return apiKey;
+    return this.sanitizeApiKey(apiKey);
   }
 
   async revokeApiKey(tenantId: string, id: string) {
@@ -86,15 +119,19 @@ export class ApiKeysService {
       action: 'REVOKE',
       entityId: id,
     });
-    return updated;
+    return this.sanitizeApiKey(updated);
   }
 
   async validateApiKey(rawKey: string) {
     const prisma = this.prisma as any;
-    const apiKey = await prisma.apiKey.findFirst({ where: { key: rawKey, isActive: true } });
-    if (!apiKey) {
-      return null;
+    const apiKeys = await prisma.apiKey.findMany({ where: { isActive: true } });
+    for (const apiKey of apiKeys) {
+      const hashedInput = await this.hashApiKey(rawKey, apiKey.keyHash);
+      const matches = this.constantTimeMatch(hashedInput, apiKey.keyHash);
+      if (matches) {
+        return { tenantId: apiKey.tenantId, apiKey: this.sanitizeApiKey(apiKey) };
+      }
     }
-    return { tenantId: apiKey.tenantId, apiKey };
+    return null;
   }
 }
