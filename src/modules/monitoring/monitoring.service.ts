@@ -154,6 +154,7 @@ export class MonitoringService {
       audit: {
         events: this.auditService.getEvents().length,
         traces: this.auditService.getTraces().length,
+        encryptionEnabled: this.auditService.isEncryptionEnabled(),
       },
       metrics: {
         totalRequests: this.totalRequests,

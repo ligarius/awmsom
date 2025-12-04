@@ -10,7 +10,20 @@ export const configValidationSchema = Joi.object({
   REDIS_PASSWORD: Joi.string().allow('', null),
   JWT_SECRET: Joi.string().min(32).required(),
   TOTP_ENCRYPTION_KEY: Joi.string().min(32).required(),
-  AUDIT_LOG_ENCRYPTION_KEY: Joi.string().min(32).required(),
+  AUDIT_LOG_ENCRYPTION_KEY: Joi.string()
+    .base64({ paddingRequired: true })
+    .custom((value, helpers) => {
+      const decoded = Buffer.from(value, 'base64');
+      if (decoded.length !== 32) {
+        return helpers.error('any.invalid');
+      }
+      return value;
+    }, '32-byte AES key')
+    .messages({
+      'string.base64': 'AUDIT_LOG_ENCRYPTION_KEY must be a base64 encoded string',
+      'any.invalid': 'AUDIT_LOG_ENCRYPTION_KEY must decode to exactly 32 bytes',
+    })
+    .required(),
   AUDIT_LOG_RETENTION_DAYS: Joi.number().integer().min(1).default(365),
   RBAC_EXCESSIVE_PERMISSION_THRESHOLD: Joi.number().integer().min(1).default(20),
   KPIS_CACHE_TTL: Joi.number().integer().min(1).default(300),

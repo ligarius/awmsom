@@ -10,12 +10,13 @@ export class AuditService {
   private readonly logger = new Logger(AuditService.name);
   private readonly events: any[] = [];
   private readonly traces: any[] = [];
-  private readonly encryptionKey: Buffer | null;
+  private readonly encryptionKey: Buffer;
   private readonly retentionDays: number;
 
   constructor(private readonly prisma: PrismaService, private readonly pagination: PaginationService) {
     this.encryptionKey = this.loadEncryptionKey();
     this.retentionDays = this.loadRetentionDays();
+    this.logger.log('Audit log encryption is enabled.');
   }
 
   async recordLog(entry: AuditLogInput) {
@@ -82,6 +83,10 @@ export class AuditService {
     return this.traces;
   }
 
+  isEncryptionEnabled() {
+    return Boolean(this.encryptionKey);
+  }
+
   async exportAccessReviews(tenantId: string, start?: Date, end?: Date) {
     const reviews = await this.prisma.accessReview.findMany({
       where: {
@@ -125,23 +130,18 @@ export class AuditService {
     });
   }
 
-  private loadEncryptionKey(): Buffer | null {
+  private loadEncryptionKey(): Buffer {
     const rawKey = process.env.AUDIT_LOG_ENCRYPTION_KEY;
     if (!rawKey) {
-      this.logger.warn('AUDIT_LOG_ENCRYPTION_KEY is not configured; audit metadata will not be stored.');
-      return null;
+      throw new Error('AUDIT_LOG_ENCRYPTION_KEY is not configured.');
     }
-    try {
-      const key = Buffer.from(rawKey, 'base64');
-      if (key.length !== 32) {
-        this.logger.warn('AUDIT_LOG_ENCRYPTION_KEY must be a base64 encoded 32-byte key (AES-256).');
-        return null;
-      }
-      return key;
-    } catch (error) {
-      this.logger.warn(`Failed to parse AUDIT_LOG_ENCRYPTION_KEY: ${String(error)}`);
-      return null;
+
+    const key = Buffer.from(rawKey, 'base64');
+    if (key.length !== 32) {
+      throw new Error('AUDIT_LOG_ENCRYPTION_KEY must be a base64 encoded 32-byte key (AES-256).');
     }
+
+    return key;
   }
 
   private loadRetentionDays(): number {
@@ -167,9 +167,6 @@ export class AuditService {
     if (!metadata) {
       return undefined;
     }
-    if (!this.encryptionKey) {
-      return undefined;
-    }
     const iv = randomBytes(12);
     const cipher = createCipheriv('aes-256-gcm', this.encryptionKey, iv);
     const serialized = Buffer.from(JSON.stringify(metadata), 'utf8');
@@ -180,10 +177,6 @@ export class AuditService {
 
   private decryptPayload(encryptedPayload?: string | null): Prisma.JsonValue | undefined {
     if (!encryptedPayload) {
-      return undefined;
-    }
-    if (!this.encryptionKey) {
-      this.logger.warn('Cannot decrypt audit log metadata because encryption key is not available.');
       return undefined;
     }
     try {
