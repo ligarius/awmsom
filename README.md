@@ -61,16 +61,21 @@ OAUTH_OIDC_DEMO_AUDIENCE=awmsom-api
    ```bash
    npm install
    ```
-2. Generar cliente Prisma y aplicar migraciones:
+2. Levantar las dependencias (PostgreSQL y Redis) con Docker Compose:
+   ```bash
+   docker compose up -d
+   ```
+   Asegúrate de que las credenciales coincidan con `DATABASE_URL` en tu `.env`.
+3. Generar cliente Prisma y aplicar migraciones:
    ```bash
    npm run prisma:generate
    npx prisma migrate deploy
    ```
-3. Ejecutar en modo desarrollo con recarga en caliente:
+4. Ejecutar en modo desarrollo con recarga en caliente:
    ```bash
    npm run start:dev
    ```
-4. Compilar y ejecutar la versión productiva:
+5. Compilar y ejecutar la versión productiva:
    ```bash
    npm run build
    npm start
