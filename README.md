@@ -71,6 +71,14 @@ OAUTH_OIDC_DEMO_AUDIENCE=awmsom-api
    npm run prisma:generate
    npx prisma migrate deploy
    ```
+   ### Migraciones (runbook rápido)
+   - En errores P3009 donde una migración queda en estado `failed`, primero resuélvela antes de reintentar el despliegue:
+     ```bash
+     npx prisma migrate resolve --rolled-back 20240715_api_key_hash
+     # o usa --applied si la migración ya se aplicó manualmente
+     npx prisma migrate deploy
+     ```
+   - Realiza copias de seguridad antes de resolver estados manualmente y valida el registro en la tabla `_prisma_migrations` para confirmar el estado actual de cada migración.
 4. Ejecutar en modo desarrollo con recarga en caliente:
    ```bash
    npm run start:dev
