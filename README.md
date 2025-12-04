@@ -26,7 +26,7 @@ Crea un archivo `.env` en la raíz del backend con las variables mínimas (ver `
 # Claves críticas
 JWT_SECRET="please-change-me-to-a-strong-random-secret-at-least-32-chars"
 TOTP_ENCRYPTION_KEY="changemechangemechangemechangeme"
-AUDIT_LOG_ENCRYPTION_KEY="<cadena_base64_32_bytes>"
+AUDIT_LOG_ENCRYPTION_KEY="MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=" # base64 de 32 bytes (AES-256)
 
 # Persistencia y Redis
 DATABASE_URL="postgresql://user:pass@localhost:5432/awmsom"
