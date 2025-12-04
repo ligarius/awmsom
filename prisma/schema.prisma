@@ -1256,7 +1256,7 @@ model ApiKey {
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
 
   name      String
-  key       String
+  keyHash   String
   isActive  Boolean  @default(true)
   canRead   Boolean  @default(true)
   canWrite  Boolean  @default(false)
@@ -1265,7 +1265,7 @@ model ApiKey {
   revokedAt DateTime?
 
   @@index([tenantId])
-  @@unique([key])
+  @@unique([keyHash])
 }
 
 model IntegrationConfig {
