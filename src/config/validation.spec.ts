@@ -10,7 +10,7 @@ describe('configValidationSchema', () => {
     REDIS_DB: 0,
     JWT_SECRET: 'averysecurejwtsecretwithmorethan32characters!!',
     TOTP_ENCRYPTION_KEY: '12345678901234567890123456789012',
-    AUDIT_LOG_ENCRYPTION_KEY: '12345678901234567890123456789012',
+    AUDIT_LOG_ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
   };
 
   it('requires OAuth provider configuration when the OAuth flow is enabled', () => {
@@ -39,5 +39,26 @@ describe('configValidationSchema', () => {
 
     expect(error).toBeUndefined();
     expect(value.OAUTH_FLOW_ENABLED).toBe(true);
+  });
+
+  it('rejects audit encryption keys that are not 32-byte base64 strings', () => {
+    const { error } = configValidationSchema.validate(
+      { ...baseEnv, AUDIT_LOG_ENCRYPTION_KEY: 'invalid-base64' },
+      { abortEarly: false },
+    );
+
+    expect(error).toBeDefined();
+    expect(error?.message).toContain('AUDIT_LOG_ENCRYPTION_KEY');
+  });
+
+  it('rejects audit encryption keys that decode to the wrong length', () => {
+    const shortKey = Buffer.from('too-short', 'utf8').toString('base64');
+    const { error } = configValidationSchema.validate(
+      { ...baseEnv, AUDIT_LOG_ENCRYPTION_KEY: shortKey },
+      { abortEarly: false },
+    );
+
+    expect(error).toBeDefined();
+    expect(error?.message).toContain('AUDIT_LOG_ENCRYPTION_KEY');
   });
 });
