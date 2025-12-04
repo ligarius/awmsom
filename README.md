@@ -46,6 +46,16 @@ NEXT_PUBLIC_API_URL="http://localhost:3000"
 NEXT_PUBLIC_OAUTH_AUTHORIZE_URL="http://localhost:3000/auth/oauth/authorize" # opcional si se delega en otro IdP
 ```
 
+Para habilitar el flujo OAuth del backend se espera la configuración del proveedor por defecto (`oidc-demo`). Al activar
+`OAUTH_FLOW_ENABLED`, se deben declarar los endpoints y credenciales del IdP:
+
+```bash
+OAUTH_FLOW_ENABLED=true
+OAUTH_OIDC_DEMO_AUTHORIZE_URL=https://oidc-demo.example.com/authorize
+OAUTH_OIDC_DEMO_SECRET=please-change-this-oidc-demo-secret
+OAUTH_OIDC_DEMO_AUDIENCE=awmsom-api
+```
+
 ## Puesta en marcha del backend
 1. Instalar dependencias:
    ```bash
