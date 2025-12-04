@@ -15,4 +15,14 @@ export const configValidationSchema = Joi.object({
   RBAC_EXCESSIVE_PERMISSION_THRESHOLD: Joi.number().integer().min(1).default(20),
   KPIS_CACHE_TTL: Joi.number().integer().min(1).default(300),
   TRACE_CACHE_TTL: Joi.number().integer().min(1).default(120),
+  OAUTH_FLOW_ENABLED: Joi.boolean().truthy('true').falsy('false').default(false),
+  OAUTH_OIDC_DEMO_AUTHORIZE_URL: Joi.string()
+    .uri()
+    .when('OAUTH_FLOW_ENABLED', { is: true, then: Joi.required() }),
+  OAUTH_OIDC_DEMO_SECRET: Joi.string()
+    .min(1)
+    .when('OAUTH_FLOW_ENABLED', { is: true, then: Joi.required() }),
+  OAUTH_OIDC_DEMO_AUDIENCE: Joi.string()
+    .min(1)
+    .when('OAUTH_FLOW_ENABLED', { is: true, then: Joi.required() }),
 });
