@@ -57,6 +57,9 @@ OAUTH_OIDC_DEMO_AUDIENCE=awmsom-api
 ```
 
 ## Puesta en marcha del backend
+Prerequisitos:
+- Node.js 20 o superior (recomendado usar `nvm` para emparejar versiones)
+
 1. Instalar dependencias:
    ```bash
    npm install
