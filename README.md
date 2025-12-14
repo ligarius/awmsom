@@ -71,6 +71,7 @@ OAUTH_OIDC_DEMO_AUDIENCE=awmsom-api
    npm run prisma:generate
    npx prisma migrate deploy
    ```
+   Si `npx prisma migrate deploy` deja una migración en estado `failed`, sigue el runbook detallado: [docs/runbooks/prisma-failed-migration.md](docs/runbooks/prisma-failed-migration.md).
    ### Migraciones (runbook rápido)
    - En errores P3009 donde una migración queda en estado `failed`, primero resuélvela antes de reintentar el despliegue:
      ```bash
