@@ -1,14 +1,14 @@
-# Runbook: Limpiar migraciones Prisma en estado `failed`
+# Runbook: Recuperar migraciones Prisma en estado `failed`
 
-Este runbook describe cómo recuperar una migración de Prisma marcada como `failed`, registrando el estado correcto en `_prisma_migrations` y reintentando el despliegue.
+Este runbook describe cómo actuar cuando una migración de Prisma queda en estado `failed` (por ejemplo, error P3009), registrando el estado correcto en `_prisma_migrations` y reintentando el despliegue.
 
 ## Precauciones y respaldo
 - **Realiza un respaldo completo** de la base de datos antes de modificar manualmente el estado de las migraciones.
 - Ejecuta los comandos desde la raíz del backend, con la variable `DATABASE_URL` apuntando al entorno afectado.
 
-## Pasos
-1. **Identificar la migración fallida**
-   - Revisa los registros en la tabla `_prisma_migrations` para confirmar la migración en estado `failed` y su `name` (por ejemplo `20240715_api_key_hash`):
+## Procedimiento
+1. **Verificar el estado actual en `_prisma_migrations`**
+   - Confirma qué migración está en `failed` y su `name` (por ejemplo `20240715_api_key_hash`):
      ```sql
      SELECT id, name, finished_at, rolled_back_at, logs
      FROM _prisma_migrations
@@ -26,18 +26,18 @@ Este runbook describe cómo recuperar una migración de Prisma marcada como `fai
      ```
    - Sustituye `20240715_api_key_hash` por el nombre real de la migración.
 
-3. **Validar el registro en `_prisma_migrations`**
-   - Confirma que el registro de la migración quedó con `rolled_back_at` (si aplicaste `--rolled-back`) o con `finished_at` (si usaste `--applied`).
+3. **Validar la resolución en `_prisma_migrations`**
+   - Verifica que la migración quedó con `rolled_back_at` (si aplicaste `--rolled-back`) o con `finished_at` (si usaste `--applied`).
 
 4. **Reintentar el despliegue**
-   - Una vez resuelto el estado, vuelve a ejecutar las migraciones pendientes:
+   - Ejecuta nuevamente las migraciones pendientes:
      ```bash
      npx prisma migrate deploy
      ```
 
 5. **Verificación final**
-   - Comprueba que `npx prisma migrate deploy` finaliza sin errores.
-   - Revisa nuevamente `_prisma_migrations` para confirmar que no quedan migraciones en estado `failed`.
+   - Confirma que `npx prisma migrate deploy` finaliza sin errores.
+   - Revisa otra vez `_prisma_migrations` para asegurar que no quedan migraciones en estado `failed`.
 
 ## Notas
 - Evita eliminar archivos de migración ya publicados; modifica únicamente el estado registrado en `_prisma_migrations`.
