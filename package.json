@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "WMS backend baseline with NestJS and Prisma",
   "main": "dist/main.js",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node dist/main.js",
     "start:dev": "ts-node -r tsconfig-paths/register src/main.ts",
