@@ -28,8 +28,8 @@ JWT_SECRET="please-change-me-to-a-strong-random-secret-at-least-32-chars"
 TOTP_ENCRYPTION_KEY="changemechangemechangemechangeme"
 AUDIT_LOG_ENCRYPTION_KEY="MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=" # base64 de 32 bytes (AES-256)
 
-# Persistencia y Redis
-DATABASE_URL="postgresql://user:pass@localhost:5432/awmsom"
+# Persistencia y Redis (coincide con las credenciales por defecto de `docker-compose.yml`)
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/awmsom"
 REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_DB=0
