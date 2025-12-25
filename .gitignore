@@ -15,3 +15,5 @@ node_modules/
 # next build artifacts
 frontend/.next/
 frontend/out/
+
+frontend/.next/
