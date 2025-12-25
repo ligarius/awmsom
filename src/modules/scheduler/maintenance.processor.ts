@@ -1,13 +1,17 @@
-import { Process, Processor } from '@nestjs/bullmq';
+import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Processor('maintenance-queue')
-export class MaintenanceProcessor {
-  constructor(private readonly prisma: PrismaService) {}
+export class MaintenanceProcessor extends WorkerHost {
+  constructor(private readonly prisma: PrismaService) {
+    super();
+  }
 
-  @Process('maintenance')
-  async handleMaintenance(job: Job<{ tenantId: string; action: string; olderThanDays?: number }>) {
+  async process(job: Job<{ tenantId: string; action: string; olderThanDays?: number }>) {
+    if (job.name !== 'maintenance') {
+      return;
+    }
     if (job.data.action === 'cleanup-audit-logs') {
       const olderThanDays = job.data.olderThanDays ?? 365;
       const threshold = new Date();

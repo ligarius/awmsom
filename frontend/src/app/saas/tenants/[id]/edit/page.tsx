@@ -7,10 +7,12 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormSection } from "@/components/FormSection";
 import { useApi } from "@/hooks/useApi";
 import type { Tenant, TenantInput } from "@/types/saas";
 import { toast } from "@/components/ui/use-toast";
+import { PLAN_OPTIONS } from "@/lib/plans";
 
 export default function EditTenantPage() {
   const params = useParams();
@@ -66,7 +68,18 @@ export default function EditTenantPage() {
               </div>
               <div>
                 <Label htmlFor="plan">Plan</Label>
-                <Input id="plan" value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })} />
+                <Select value={form.plan} onValueChange={(value) => setForm({ ...form, plan: value })}>
+                  <SelectTrigger id="plan">
+                    <SelectValue placeholder="Selecciona un plan" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PLAN_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label} ({option.description})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </FormSection>

@@ -375,6 +375,11 @@ export class OutboundService {
       throw new NotFoundException('Picking task not found');
     }
 
+    const outboundOrder = task.outboundOrder;
+    if (!outboundOrder) {
+      throw new BadRequestException('Outbound order not found');
+    }
+
     if (task.status !== PickingTaskStatus.IN_PROGRESS) {
       throw new BadRequestException('Picking task must be in progress');
     }
@@ -477,7 +482,7 @@ export class OutboundService {
         ? OutboundOrderStatus.PICKED
         : anyPicked
           ? OutboundOrderStatus.PARTIALLY_PICKED
-          : task.outboundOrder.status;
+          : outboundOrder.status;
 
       await tx.outboundOrder.update({
         where: { id: task.outboundOrderId, tenantId } as any,

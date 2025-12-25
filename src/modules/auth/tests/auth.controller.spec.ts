@@ -26,7 +26,9 @@ describe('AuthController routes', () => {
   });
 
   it('delegates to service when listing users by tenant', async () => {
-    service.listUsers.mockResolvedValueOnce([{ id: '1', email: 'a', tenantId: 't1', isActive: true }]);
+    service.listUsers.mockResolvedValueOnce([
+      { id: '1', email: 'a', tenantId: 't1', isActive: true, fullName: 'User A' },
+    ]);
 
     const result = await controller.listUsers('t1');
 
@@ -35,8 +37,20 @@ describe('AuthController routes', () => {
   });
 
   it('delegates deactivation and deletion to service', async () => {
-    service.deactivateUser.mockResolvedValueOnce({ id: '1', email: 'a', tenantId: 't1', isActive: false });
-    service.deleteUser.mockResolvedValueOnce({ id: '2', email: 'b', tenantId: 't1', isActive: true });
+    service.deactivateUser.mockResolvedValueOnce({
+      id: '1',
+      email: 'a',
+      tenantId: 't1',
+      isActive: false,
+      fullName: 'User A',
+    });
+    service.deleteUser.mockResolvedValueOnce({
+      id: '2',
+      email: 'b',
+      tenantId: 't1',
+      isActive: true,
+      fullName: 'User B',
+    });
 
     const deactivated = await controller.deactivateUser('1');
     const deleted = await controller.deleteUser('2');

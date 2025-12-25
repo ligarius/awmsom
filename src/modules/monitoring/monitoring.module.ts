@@ -15,5 +15,6 @@ import { MonitoringService } from './monitoring.service';
       useClass: MonitoringInterceptor,
     },
   ],
+  exports: [MonitoringService],
 })
 export class MonitoringModule {}

@@ -2,6 +2,7 @@
 
 import { api } from "@/lib/axios";
 import { useCallback } from "react";
+import type { AxiosRequestConfig } from "axios";
 
 /**
  * Thin axios wrapper to keep request helpers colocated with components.
@@ -10,28 +11,36 @@ import { useCallback } from "react";
  */
 export function useApi() {
   const get = useCallback(
-    async <T>(url: string, params?: Record<string, unknown>) => {
-      const { data } = await api.get<T>(url, { params });
+    async <T>(url: string, params?: Record<string, unknown>, config?: AxiosRequestConfig) => {
+      const { data } = await api.get<T>(url, { params, ...config });
       return data;
     },
     []
   );
 
   const post = useCallback(
-    async <T>(url: string, body?: unknown) => {
-      const { data } = await api.post<T>(url, body);
+    async <T>(url: string, body?: unknown, config?: AxiosRequestConfig) => {
+      const { data } = await api.post<T>(url, body, config);
       return data;
     },
     []
   );
 
   const patch = useCallback(
-    async <T>(url: string, body?: unknown) => {
-      const { data } = await api.patch<T>(url, body);
+    async <T>(url: string, body?: unknown, config?: AxiosRequestConfig) => {
+      const { data } = await api.patch<T>(url, body, config);
       return data;
     },
     []
   );
 
-  return { get, post, patch };
+  const put = useCallback(
+    async <T>(url: string, body?: unknown, config?: AxiosRequestConfig) => {
+      const { data } = await api.put<T>(url, body, config);
+      return data;
+    },
+    []
+  );
+
+  return { get, post, patch, put };
 }

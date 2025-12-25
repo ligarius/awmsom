@@ -4,17 +4,17 @@ import { CycleCountStatus } from '@prisma/client';
 
 export class CreateCycleCountLineInput {
   @IsUUID()
-  productId: string;
+  productId!: string;
 
   @IsUUID()
-  locationId: string;
+  locationId!: string;
 
   @IsOptional()
   @IsUUID()
   batchId?: string;
 
   @IsString()
-  uom: string;
+  uom!: string;
 
   @Type(() => Number)
   @IsOptional()
@@ -24,7 +24,7 @@ export class CreateCycleCountLineInput {
 
 export class CreateCycleCountTaskDto {
   @IsUUID()
-  warehouseId: string;
+  warehouseId!: string;
 
   @IsOptional()
   @IsString()
@@ -41,23 +41,23 @@ export class AddCycleCountLinesDto {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateCycleCountLineInput)
-  lines: CreateCycleCountLineInput[];
+  lines!: CreateCycleCountLineInput[];
 }
 
 export class SubmitCycleCountLineDto {
   @IsUUID()
-  lineId: string;
+  lineId!: string;
 
   @Type(() => Number)
   @IsNumber()
-  countedQty: number;
+  countedQty!: number;
 }
 
 export class SubmitCycleCountResultDto {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => SubmitCycleCountLineDto)
-  lines: SubmitCycleCountLineDto[];
+  lines!: SubmitCycleCountLineDto[];
 }
 
 export class CycleCountQueryDto {

@@ -367,4 +367,331 @@ export class TraceabilityService {
       })),
     };
   }
+
+  async getBatchOverview(tenantId: string, batchCode: string) {
+    const batch = (await this.prisma.batch.findFirst({
+      where: {
+        tenantId,
+        OR: [{ batchCode }, { code: batchCode }],
+      } as any,
+      include: { product: true } as any,
+    })) as any;
+
+    if (!batch) {
+      throw new NotFoundException('Batch not found');
+    }
+
+    const inboundLine = (await this.prisma.inboundReceiptLine.findFirst({
+      where: {
+        tenantId,
+        OR: [{ batchId: batch.id }, { batchCode }],
+      } as any,
+      include: { inboundReceipt: true },
+      orderBy: { createdAt: 'asc' },
+    })) as any;
+
+    const receipt = inboundLine?.inboundReceipt;
+    const movements = (await this.prisma.movementLine.findMany({
+      where: {
+        tenantId,
+        OR: [{ batchId: batch.id }, { batchCode }],
+      } as any,
+      include: {
+        movementHeader: true,
+        fromLocation: true,
+        toLocation: true,
+        product: true,
+        batch: true,
+      } as any,
+      orderBy: { createdAt: 'asc' },
+    })) as any[];
+
+    const outboundLines = (await this.prisma.outboundOrderLine.findMany({
+      where: {
+        tenantId,
+        productId: batch.productId,
+        pickingTaskLines: { some: { batchId: batch.id } },
+      } as any,
+      include: {
+        outboundOrder: { include: { customer: true } },
+        pickingTaskLines: { include: { batch: true } },
+        product: true,
+      } as any,
+      orderBy: { createdAt: 'desc' },
+    })) as any[];
+
+    const orderMap = new Map<string, { id: string; customer: string; date: string }>();
+    outboundLines.forEach((line) => {
+      const order = (line as any).outboundOrder;
+      if (!order) return;
+      const id = order.externalRef ?? order.id;
+      if (!orderMap.has(order.id)) {
+        orderMap.set(order.id, {
+          id,
+          customer: order.customer?.name ?? order.customerRef ?? order.customerId ?? 'N/A',
+          date: (order.requestedShipDate ?? order.createdAt).toISOString(),
+        });
+      }
+    });
+
+    const customers = Array.from(new Set(Array.from(orderMap.values()).map((order) => order.customer)));
+
+    return {
+      batch: batch.batchCode ?? batch.code ?? batchCode,
+      reception: {
+        document: receipt?.externalRef ?? receipt?.id ?? batchCode,
+        date: (receipt?.receivedAt ?? receipt?.createdAt ?? new Date()).toISOString(),
+        supplier: undefined,
+      },
+      movements: movements.map((movement) => this.formatMovement(movement)),
+      orders: Array.from(orderMap.values()),
+      customers,
+    };
+  }
+
+  async getProductTrace(tenantId: string, sku: string) {
+    const product = await this.prisma.product.findFirst({
+      where: {
+        tenantId,
+        OR: [{ sku }, { id: sku }],
+      } as any,
+    });
+
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    const movements = (await this.prisma.movementLine.findMany({
+      where: { tenantId, productId: product.id } as any,
+      include: {
+        movementHeader: true,
+        fromLocation: true,
+        toLocation: true,
+        product: true,
+        batch: true,
+      } as any,
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    })) as any[];
+
+    const inventory = (await this.prisma.inventory.findMany({
+      where: { tenantId, productId: product.id } as any,
+      include: { location: true, batch: true },
+      orderBy: { updatedAt: 'desc' },
+    })) as any[];
+
+    const locationsMap = new Map<string, { location: string; quantity: number; batch?: string }>();
+    const batches = new Set<string>();
+
+    inventory.forEach((record: any) => {
+      const batchCode = record.batch?.batchCode ?? record.batch?.code ?? record.batchCode;
+      if (batchCode) {
+        batches.add(batchCode);
+      }
+      const key = `${record.location?.code ?? record.locationId}:${batchCode ?? ''}`;
+      const entry = locationsMap.get(key) ?? {
+        location: record.location?.code ?? record.locationId,
+        quantity: 0,
+        batch: batchCode,
+      };
+      entry.quantity += Number(record.quantity ?? 0);
+      locationsMap.set(key, entry);
+    });
+
+    const inboundLines = (await this.prisma.inboundReceiptLine.findMany({
+      where: { tenantId, productId: product.id } as any,
+      include: { inboundReceipt: true },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    })) as any[];
+
+    const outboundLines = (await this.prisma.outboundOrderLine.findMany({
+      where: { tenantId, productId: product.id } as any,
+      include: { outboundOrder: true },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    })) as any[];
+
+    return {
+      sku: product.sku,
+      movements: movements.map((movement) => this.formatMovement(movement)),
+      locations: Array.from(locationsMap.values()),
+      batches: Array.from(batches),
+      inbound: inboundLines.map((line: any) => ({
+        document: line.inboundReceipt?.externalRef ?? line.inboundReceiptId,
+        date: (line.inboundReceipt?.receivedAt ?? line.inboundReceipt?.createdAt ?? line.createdAt).toISOString(),
+      })),
+      outbound: outboundLines.map((line: any) => ({
+        document: line.outboundOrder?.externalRef ?? line.outboundOrderId,
+        date: (line.outboundOrder?.requestedShipDate ?? line.outboundOrder?.createdAt ?? line.createdAt).toISOString(),
+      })),
+    };
+  }
+
+  async getCustomerTrace(tenantId: string, customerKey: string) {
+    const customer = await (this.prisma as any).customer.findFirst({
+      where: {
+        tenantId,
+        OR: [{ id: customerKey }, { code: customerKey }, { name: customerKey }],
+      },
+    });
+
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    const orders = (await this.prisma.outboundOrder.findMany({
+      where: { tenantId, customerId: customer.id } as any,
+      include: {
+        lines: { include: { product: true, pickingTaskLines: { include: { batch: true } } } },
+      } as any,
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    })) as any[];
+
+    const productMap = new Map<string, { sku: string; units: number; batches: Set<string> }>();
+    const orderPayload = orders.map((order) => {
+      order.lines.forEach((line: any) => {
+        const sku = line.product?.sku ?? line.productId;
+        const entry = productMap.get(line.productId) ?? { sku, units: 0, batches: new Set<string>() };
+        entry.units += Number(line.pickedQty ?? line.requestedQty ?? 0);
+        line.pickingTaskLines?.forEach((taskLine: any) => {
+          const batchCode = taskLine.batch?.batchCode ?? taskLine.batch?.code;
+          if (batchCode) {
+            entry.batches.add(batchCode);
+          }
+        });
+        productMap.set(line.productId, entry);
+      });
+      const status = order.status === 'PICKED' ? 'delivered' : order.status.toLowerCase();
+      return {
+        id: order.externalRef ?? order.id,
+        date: (order.requestedShipDate ?? order.createdAt).toISOString(),
+        status,
+      };
+    });
+
+    const deliveredCount = orders.filter((order) => order.status === 'PICKED').length;
+    const otif = orders.length > 0 ? deliveredCount / orders.length : 0;
+
+    return {
+      customer: customer.name ?? customer.code,
+      orders: orderPayload,
+      products: Array.from(productMap.values()).map((entry) => ({
+        sku: entry.sku,
+        units: entry.units,
+        batches: Array.from(entry.batches),
+      })),
+      otif,
+    };
+  }
+
+  async getOrderTrace(tenantId: string, orderKey: string) {
+    const order = (await this.prisma.outboundOrder.findFirst({
+      where: {
+        tenantId,
+        OR: [{ id: orderKey }, { externalRef: orderKey }],
+      } as any,
+      include: {
+        customer: true,
+        lines: { include: { product: true, pickingTaskLines: { include: { batch: true } } } },
+        pickingTasks: true,
+      } as any,
+    })) as any;
+
+    if (!order) {
+      throw new NotFoundException('Outbound order not found');
+    }
+
+    const shipments = (await this.prisma.shipment.findMany({
+      where: {
+        tenantId,
+        shipmentHandlingUnits: { some: { outboundOrderId: order.id } },
+      } as any,
+      orderBy: { createdAt: 'desc' },
+    })) as any[];
+
+    const movements = (await this.prisma.movementLine.findMany({
+      where: {
+        tenantId,
+        movementHeader: { reference: order.id } as any,
+      },
+      include: {
+        movementHeader: true,
+        fromLocation: true,
+        toLocation: true,
+        product: true,
+        batch: true,
+      } as any,
+      orderBy: { createdAt: 'desc' },
+    })) as any[];
+
+    return {
+      orderId: order.externalRef ?? order.id,
+      status: order.status,
+      customer: order.customer?.name ?? order.customerRef ?? order.customerId ?? 'N/A',
+      lines: order.lines.map((line: any) => ({
+        sku: line.product?.sku ?? line.productId,
+        batch: line.pickingTaskLines?.[0]?.batch?.batchCode ?? line.pickingTaskLines?.[0]?.batch?.code ?? undefined,
+        qty: Number(line.pickedQty ?? line.requestedQty ?? 0),
+      })),
+      movements: movements.map((movement) => this.formatMovement(movement)),
+      pickingTasks: order.pickingTasks.map((task: any) => ({
+        id: task.id,
+        user: task.pickerId ?? 'sin asignar',
+        status: task.status,
+      })),
+      packing: null,
+      shipments: shipments.map((shipment) => ({
+        id: shipment.id,
+        carrier: shipment.carrierRef ?? shipment.routeRef ?? 'N/A',
+        timestamp: (shipment.actualDeparture ?? shipment.scheduledDeparture ?? shipment.createdAt).toISOString(),
+      })),
+    };
+  }
+
+  async getMovementTrace(tenantId: string, movementId: string) {
+    const movement = await this.prisma.movementLine.findFirst({
+      where: { id: movementId, tenantId } as any,
+      include: {
+        movementHeader: true,
+        fromLocation: true,
+        toLocation: true,
+        product: true,
+        batch: true,
+      } as any,
+    });
+
+    if (!movement) {
+      throw new NotFoundException('Movement not found');
+    }
+
+    const formatted = this.formatMovement(movement);
+    return {
+      movementId: movement.id,
+      user: formatted.user,
+      from: formatted.from,
+      to: formatted.to,
+      sku: formatted.sku,
+      batch: formatted.batch,
+      quantity: formatted.quantity,
+      timestamp: formatted.timestamp,
+      impact: formatted.impact,
+    };
+  }
+
+  private formatMovement(movement: any) {
+    const createdAt = movement.movementHeader?.createdAt ?? movement.createdAt;
+    return {
+      id: movement.id,
+      from: movement.fromLocation?.code ?? movement.fromLocationId ?? 'N/A',
+      to: movement.toLocation?.code ?? movement.toLocationId ?? 'N/A',
+      user: movement.movementHeader?.createdBy ?? 'system',
+      sku: movement.product?.sku ?? movement.productId,
+      batch: movement.batch?.batchCode ?? movement.batch?.code ?? movement.batchCode ?? undefined,
+      quantity: Number(movement.quantity ?? 0),
+      timestamp: createdAt ? new Date(createdAt).toISOString() : undefined,
+      impact: movement.movementHeader?.movementType ?? 'MOVEMENT',
+    };
+  }
 }

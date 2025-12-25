@@ -18,7 +18,7 @@ function formatNumber(value?: number) {
 }
 
 export default function InventoryDashboardPage() {
-  const { allowed, initializing } = usePermissionGuard("DASHBOARD_READ");
+  const { allowed, initializing } = usePermissionGuard("REPORTS:READ");
   const { get } = useApi();
 
   const { data, isLoading, isError } = useQuery({

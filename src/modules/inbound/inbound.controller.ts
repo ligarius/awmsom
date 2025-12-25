@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
@@ -13,6 +14,9 @@ import { CreateInboundReceiptDto } from './dto/create-inbound-receipt.dto';
 import { AddInboundReceiptLineDto } from './dto/add-inbound-receipt-line.dto';
 import { ConfirmInboundReceiptDto } from './dto/confirm-inbound-receipt.dto';
 import { GetInboundReceiptsFilterDto } from './dto/get-inbound-receipts-filter.dto';
+import { CreateInboundLegacyDto } from './dto/create-inbound-legacy.dto';
+import { GetInboundLegacyFilterDto } from './dto/get-inbound-legacy-filter.dto';
+import { ReceiveInboundLineDto } from './dto/receive-inbound-line.dto';
 import { Permissions } from '../../decorators/permissions.decorator';
 
 @Controller('inbound')
@@ -53,5 +57,38 @@ export class InboundController {
     @Body() dto: ConfirmInboundReceiptDto,
   ) {
     return this.inboundService.confirmReceipt(id, dto);
+  }
+
+  @Get()
+  @Permissions(PermissionResource.INBOUND, PermissionAction.READ)
+  listLegacy(@Query() filters: GetInboundLegacyFilterDto) {
+    return this.inboundService.listLegacyReceipts(filters);
+  }
+
+  @Post()
+  @Permissions(PermissionResource.INBOUND, PermissionAction.CREATE)
+  createLegacy(@Body() dto: CreateInboundLegacyDto) {
+    return this.inboundService.createLegacyReceipt(dto);
+  }
+
+  @Get(':id')
+  @Permissions(PermissionResource.INBOUND, PermissionAction.READ)
+  getLegacy(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.inboundService.getLegacyReceipt(id);
+  }
+
+  @Post(':id/receive-line')
+  @Permissions(PermissionResource.INBOUND, PermissionAction.UPDATE)
+  receiveLine(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: ReceiveInboundLineDto,
+  ) {
+    return this.inboundService.receiveLegacyLine(id, dto);
+  }
+
+  @Patch(':id/complete')
+  @Permissions(PermissionResource.INBOUND, PermissionAction.APPROVE)
+  completeLegacy(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.inboundService.completeLegacyReceipt(id);
   }
 }

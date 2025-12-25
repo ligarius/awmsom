@@ -12,7 +12,7 @@ import type { ReportRow } from "@/types/analytics";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function MovementsReportPage() {
-  const { allowed, initializing } = usePermissionGuard("REPORTS_READ");
+  const { allowed, initializing } = usePermissionGuard("REPORTS:READ");
   const { get } = useApi();
   const [filters, setFilters] = useState<Record<string, string | undefined>>({});
 

@@ -1,38 +1,61 @@
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { useApi } from "@/hooks/useApi";
 import { toast } from "@/components/ui/use-toast";
-import type { Movement } from "@/types/operations";
+import type { Movement, MovementReasonConfig } from "@/types/operations";
 
 interface MovementFormProps {
   onCreated?: (movement: Movement) => void;
 }
 
 export function MovementForm({ onCreated }: MovementFormProps) {
-  const { post } = useApi();
+  const { post, get } = useApi();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const tenantId = searchParams.get("tenantId");
+  const tenantParam = tenantId ? `?tenantId=${tenantId}` : "";
   const [loading, setLoading] = useState(false);
+  const [reasons, setReasons] = useState<MovementReasonConfig[]>([]);
   const [form, setForm] = useState({
     productId: "",
     quantity: 1,
     fromLocation: "",
     toLocation: "",
-    reason: "",
+    reasonCode: "",
+    notes: "",
     type: "MANUAL" as Movement["type"]
   });
+
+  useEffect(() => {
+    get<MovementReasonConfig[]>("/config/movement-reasons")
+      .then((items) => {
+        const active = items.filter((reason) => reason.isActive);
+        setReasons(active);
+        const defaultReason = active.find((reason) => reason.isDefault);
+        if (defaultReason) {
+          setForm((prev) => ({ ...prev, reasonCode: prev.reasonCode || defaultReason.code }));
+        }
+      })
+      .catch(() => toast({ title: "No pudimos cargar los motivos", variant: "destructive" }));
+  }, [get]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      const movement = await post<Movement>("/movements", form);
+      const movement = await post<Movement>("/movements", {
+        ...form,
+        notes: form.notes.trim() || undefined
+      });
       toast({ title: "Movimiento creado", description: `Traslado de ${form.quantity} unidades` });
       onCreated?.(movement);
-      router.push(`/movements/${movement.id ?? ""}`);
+      router.push(`/movements/${movement.id ?? ""}${tenantParam}`);
     } catch (error) {
       console.error(error);
       toast({ title: "No pudimos crear el movimiento", variant: "destructive" });
@@ -88,17 +111,35 @@ export function MovementForm({ onCreated }: MovementFormProps) {
             />
           </div>
           <div className="space-y-2 md:col-span-2">
-            <Label htmlFor="reason">Motivo</Label>
-            <Input
-              id="reason"
-              placeholder="Reubicación, reabastecimiento, etc"
-              value={form.reason}
-              onChange={(e) => setForm((prev) => ({ ...prev, reason: e.target.value }))}
+            <Label>Motivo</Label>
+            <Select value={form.reasonCode} onValueChange={(value) => setForm((prev) => ({ ...prev, reasonCode: value }))}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecciona un motivo" />
+              </SelectTrigger>
+              <SelectContent>
+                {reasons.map((reason) => (
+                  <SelectItem key={reason.id} value={reason.code}>
+                    {reason.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!reasons.length && (
+              <p className="text-xs text-muted-foreground">Configura motivos en Ajustes para habilitar la lista.</p>
+            )}
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="notes">Observaciones</Label>
+            <Textarea
+              id="notes"
+              placeholder="Detalles adicionales del movimiento"
+              value={form.notes}
+              onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
             />
           </div>
         </CardContent>
         <CardFooter className="justify-end">
-          <Button type="submit" disabled={loading}>
+          <Button type="submit" disabled={loading || (!!reasons.length && !form.reasonCode)}>
             {loading ? "Guardando..." : "Crear movimiento"}
           </Button>
         </CardFooter>

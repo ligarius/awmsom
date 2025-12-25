@@ -360,7 +360,101 @@ export class ReplenishmentService {
     return result;
   }
 
-  listTransferOrders(tenantId: string) {
-    return this.prisma.transferOrder.findMany({ where: { tenantId }, include: { lines: true } });
+  async listTransferOrders(tenantId: string) {
+    const orders = await this.prisma.transferOrder.findMany({
+      where: { tenantId },
+      include: { lines: { include: { product: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return orders.map((order) => ({
+      ...order,
+      lines: order.lines.map((line) => ({
+        id: line.id,
+        productId: line.productId,
+        productSku: line.product?.sku,
+        productName: line.product?.name,
+        quantity: line.quantity,
+        uom: line.product?.defaultUom ?? 'EA',
+      })),
+    }));
+  }
+
+  async listSuggestions(tenantId: string, page = 1, pageSize = 20) {
+    const skip = (page - 1) * pageSize;
+    const [total, suggestions] = await this.prisma.$transaction([
+      this.prisma.replenishmentSuggestion.count({ where: { tenantId } }),
+      this.prisma.replenishmentSuggestion.findMany({
+        where: { tenantId },
+        include: { policy: { include: { warehouse: true, product: true } } },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+    ]);
+
+    const items = suggestions.map((suggestion) => ({
+      id: suggestion.id,
+      sku: suggestion.policy?.product?.sku ?? suggestion.productId,
+      productName: suggestion.policy?.product?.name,
+      suggestedQty: suggestion.suggestedQty,
+      uom: suggestion.policy?.product?.defaultUom ?? 'EA',
+      sourceLocation: suggestion.policy?.warehouse?.code ?? 'RESERVE',
+      destinationLocation: suggestion.policy?.warehouse?.code ?? 'PICKING',
+      reason: suggestion.reason ?? 'Reabastecimiento sugerido',
+      score: undefined,
+      status: suggestion.status,
+      policyApplied: suggestion.policy?.method ?? undefined,
+      safetyStock: suggestion.policy?.safetyStock ?? undefined,
+      min: suggestion.policy?.minQty ?? undefined,
+      max: suggestion.policy?.maxQty ?? undefined,
+    }));
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+    };
+  }
+
+  async listHistory(tenantId: string) {
+    const lines = await this.prisma.movementLine.findMany({
+      where: { tenantId, movementHeader: { movementType: MovementType.INTERNAL_TRANSFER } } as any,
+      include: { product: true, fromLocation: true, toLocation: true, movementHeader: true },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
+    return lines.map((line) => ({
+      id: line.id,
+      date: line.createdAt.toISOString(),
+      sku: line.product?.sku ?? line.productId,
+      productName: line.product?.name,
+      quantity: Number(line.quantity ?? 0),
+      user: line.movementHeader?.createdBy ?? 'sistema',
+      source: line.fromLocation?.code ?? '-',
+      destination: line.toLocation?.code ?? '-',
+      reference: line.movementHeader?.reference ?? undefined,
+    }));
+  }
+
+  async executeSuggestion(tenantId: string, id: string) {
+    const suggestion = await this.prisma.replenishmentSuggestion.findFirst({ where: { id, tenantId } });
+    if (!suggestion) {
+      throw new NotFoundException('Suggestion not found');
+    }
+    return this.prisma.replenishmentSuggestion.update({
+      where: { id },
+      data: { status: ReplenishmentStatus.EXECUTED },
+    });
+  }
+
+  async updateTransferOrderStatus(tenantId: string, id: string, status: TransferOrderStatus) {
+    const order = await this.prisma.transferOrder.findFirst({ where: { id, tenantId } });
+    if (!order) {
+      throw new NotFoundException('Transfer order not found');
+    }
+    return this.prisma.transferOrder.update({ where: { id }, data: { status } });
   }
 }

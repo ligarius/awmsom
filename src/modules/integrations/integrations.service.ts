@@ -31,7 +31,7 @@ export class IntegrationsService {
       throw new NotFoundException('Integration not found');
     }
     const updated = await this.prisma.integrationConfig.update({ where: { id }, data: dto });
-    await this.audit.recordLog({ tenantId, userId: null, resource: 'INTEGRATION', action: 'UPDATE', entityId: id });
+    await this.audit.recordLog({ tenantId, resource: 'INTEGRATION', action: 'UPDATE', entityId: id });
     return updated;
   }
 
@@ -78,7 +78,6 @@ export class IntegrationsService {
       await this.prisma.integrationJob.update({ where: { id: jobId }, data: { status: IntegrationJobStatus.SUCCESS } });
       await this.audit.recordLog({
         tenantId: job.tenantId,
-        userId: null,
         resource: 'INTEGRATION_JOB',
         action: 'PROCESS',
         entityId: job.id,

@@ -21,9 +21,10 @@ export class WebhooksController {
   }
 
   @Get('subscriptions/:id')
-  get(@Param('id') id: string) {
+  async get(@Param('id') id: string) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.webhooksService.listSubscriptions(tenantId, undefined).then((subs) => subs.find((s) => s.id === id));
+    const subs = await this.webhooksService.listSubscriptions(tenantId, undefined);
+    return subs.find((s: { id: string }) => s.id === id);
   }
 
   @Patch('subscriptions/:id')

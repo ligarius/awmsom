@@ -79,6 +79,10 @@ export default function MovementDetailPage() {
             <p className="text-xs text-muted-foreground">Motivo</p>
             <p className="font-semibold">{movement.reason ?? "No informado"}</p>
           </div>
+          <div className="md:col-span-2">
+            <p className="text-xs text-muted-foreground">Observaciones</p>
+            <p className="font-semibold">{movement.notes ?? "Sin observaciones"}</p>
+          </div>
         </CardContent>
       </Card>
     </AppShell>

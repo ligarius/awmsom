@@ -1,0 +1,7 @@
+export const ROLE_OWNER = 'OWNER';
+export const ROLE_PLATFORM_ADMIN = 'PLATFORM_ADMIN';
+export const ROLE_TENANT_ADMIN = 'ADMIN';
+export const ROLE_TENANT_SUPERVISOR = 'SUPERVISOR';
+export const ROLE_TENANT_OPERATOR = 'OPERATOR';
+
+export const PLATFORM_ROLES = new Set([ROLE_OWNER, ROLE_PLATFORM_ADMIN]);

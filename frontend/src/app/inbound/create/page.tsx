@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/use-toast";
 import { useApi } from "@/hooks/useApi";
 import { usePermissions } from "@/hooks/usePermissions";
+import { WarehouseSelect } from "@/components/settings/WarehouseSelect";
+import { ProductSelect } from "@/components/settings/ProductSelect";
 import { nanoid } from "nanoid";
 
 interface LineDraft {
@@ -21,17 +23,19 @@ interface LineDraft {
 
 export default function InboundCreatePage() {
   const router = useRouter();
-  const { canInboundExecute } = usePermissions();
+  const { canInboundExecute, isLoading } = usePermissions();
   const { post } = useApi();
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ supplier: "", warehouseId: "", expectedDate: "" });
-  const [lines, setLines] = useState<LineDraft[]>([{ id: nanoid(), sku: "", expectedQty: 0, uom: "UN" }]);
+  const [lines, setLines] = useState<LineDraft[]>([{ id: nanoid(), sku: "", expectedQty: 1, uom: "UN" }]);
 
-  if (!canInboundExecute) {
-    router.replace("/forbidden");
-  }
+  useEffect(() => {
+    if (!isLoading && !canInboundExecute) {
+      router.replace("/forbidden");
+    }
+  }, [canInboundExecute, isLoading, router]);
 
-  const addLine = () => setLines((prev) => [...prev, { id: nanoid(), sku: "", expectedQty: 0, uom: "UN" }]);
+  const addLine = () => setLines((prev) => [...prev, { id: nanoid(), sku: "", expectedQty: 1, uom: "UN" }]);
   const updateLine = (id: string, changes: Partial<LineDraft>) =>
     setLines((prev) => prev.map((line) => (line.id === id ? { ...line, ...changes } : line)));
   const removeLine = (id: string) => setLines((prev) => prev.filter((line) => line.id !== id));
@@ -51,6 +55,10 @@ export default function InboundCreatePage() {
       setLoading(false);
     }
   };
+
+  if (!canInboundExecute && !isLoading) {
+    return null;
+  }
 
   return (
     <AppShell>
@@ -80,15 +88,13 @@ export default function InboundCreatePage() {
                 placeholder="Proveedor"
               />
             </div>
-            <div className="space-y-2">
-              <Label>Bodega</Label>
-              <Input
-                required
-                value={form.warehouseId}
-                onChange={(e) => setForm((prev) => ({ ...prev, warehouseId: e.target.value }))}
-                placeholder="warehouse-id"
-              />
-            </div>
+          <div className="space-y-2">
+            <Label>Bodega</Label>
+            <WarehouseSelect
+              value={form.warehouseId}
+              onChange={(value) => setForm((prev) => ({ ...prev, warehouseId: value }))}
+            />
+          </div>
             <div className="space-y-2">
               <Label>Fecha esperada</Label>
               <Input
@@ -110,11 +116,16 @@ export default function InboundCreatePage() {
               <div key={line.id} className="grid gap-3 rounded-lg border p-3 md:grid-cols-4">
                 <div className="space-y-2">
                   <Label>SKU</Label>
-                  <Input
-                    required
+                  <ProductSelect
                     value={line.sku}
-                    onChange={(e) => updateLine(line.id, { sku: e.target.value })}
-                    placeholder="SKU"
+                    valueMode="code"
+                    onChange={(value) => updateLine(line.id, { sku: value })}
+                    onSelect={(product) => {
+                      if (product?.defaultUom) {
+                        updateLine(line.id, { uom: product.defaultUom });
+                      }
+                    }}
+                    placeholder="Selecciona SKU"
                   />
                 </div>
                 <div className="space-y-2">

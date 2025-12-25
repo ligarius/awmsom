@@ -2,15 +2,16 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { AppShell } from "@/components/layout/AppShell";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageShell } from "@/components/layout/PageShell";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { ContentSection } from "@/components/layout/ContentSection";
+import { EmptyState } from "@/components/layout/EmptyState";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useApi } from "@/hooks/useApi";
 import { toast } from "@/components/ui/use-toast";
-import { SettingsHeader } from "@/components/settings/SettingsHeader";
 import { usePermissions } from "@/hooks/usePermissions";
 
 export default function CreateWarehousePage() {
@@ -40,58 +41,55 @@ export default function CreateWarehousePage() {
 
   if (!canWriteWmsConfig) {
     return (
-      <AppShell>
-        <Card>
-          <CardHeader>
-            <CardTitle>Acceso denegado</CardTitle>
-            <CardDescription>No tienes permisos para crear bodegas.</CardDescription>
-          </CardHeader>
-        </Card>
-      </AppShell>
+      <PageShell>
+        <PageHeader title="Crear bodega" description="Gestiona datos maestros del WMS." backHref="/settings/warehouses" />
+        <EmptyState
+          title="Acceso denegado"
+          description="No tienes permisos para crear bodegas."
+        />
+      </PageShell>
     );
   }
 
   return (
-    <AppShell>
-      <SettingsHeader title="Crear bodega" backTo="/settings/warehouses" />
-      <Card>
-        <CardHeader>
-          <CardTitle>Datos de la bodega</CardTitle>
-          <CardDescription>Completa la información obligatoria.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div>
-              <Label>Nombre</Label>
-              <Input value={form.name} onChange={(e) => handleChange("name", e.target.value)} />
-            </div>
-            <div>
-              <Label>Código</Label>
-              <Input value={form.code} onChange={(e) => handleChange("code", e.target.value)} />
-            </div>
-            <div>
-              <Label>País</Label>
-              <Input value={form.country} onChange={(e) => handleChange("country", e.target.value)} />
-            </div>
-            <div>
-              <Label>Ciudad</Label>
-              <Input value={form.city} onChange={(e) => handleChange("city", e.target.value)} />
-            </div>
-            <div className="md:col-span-2">
-              <Label>Dirección</Label>
-              <Input value={form.address} onChange={(e) => handleChange("address", e.target.value)} />
-            </div>
-            <div className="flex items-center gap-2 md:col-span-2">
-              <Checkbox checked={form.isActive} onCheckedChange={(checked) => handleChange("isActive", Boolean(checked))} />
-              <Label>Activa</Label>
-            </div>
+    <PageShell>
+      <PageHeader title="Crear bodega" description="Completa la informacion obligatoria." backHref="/settings/warehouses" />
+      <ContentSection title="Datos de la bodega" description="Campos obligatorios para el registro.">
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label>Nombre</Label>
+            <Input value={form.name} onChange={(e) => handleChange("name", e.target.value)} />
           </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => router.push("/settings/warehouses")}>Cancelar</Button>
-            <Button onClick={handleSubmit}>Guardar</Button>
+          <div className="space-y-2">
+            <Label>Codigo</Label>
+            <Input value={form.code} onChange={(e) => handleChange("code", e.target.value)} />
           </div>
-        </CardContent>
-      </Card>
-    </AppShell>
+          <div className="space-y-2">
+            <Label>Pais</Label>
+            <Input value={form.country} onChange={(e) => handleChange("country", e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Ciudad</Label>
+            <Input value={form.city} onChange={(e) => handleChange("city", e.target.value)} />
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label>Direccion</Label>
+            <Input value={form.address} onChange={(e) => handleChange("address", e.target.value)} />
+          </div>
+          <div className="flex items-center gap-2 md:col-span-2">
+            <Checkbox checked={form.isActive} onCheckedChange={(checked) => handleChange("isActive", Boolean(checked))} />
+            <Label>Activa</Label>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-4">
+          <Button variant="outline" size="sm" onClick={() => router.push("/settings/warehouses")}>
+            Cancelar
+          </Button>
+          <Button size="sm" onClick={handleSubmit}>
+            Guardar
+          </Button>
+        </div>
+      </ContentSection>
+    </PageShell>
   );
 }

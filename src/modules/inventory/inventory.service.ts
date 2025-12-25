@@ -712,9 +712,298 @@ export class InventoryService {
 
     return StockStatus.AVAILABLE;
   }
-  async listInventorySummary() {
+  async listInventorySummary(filters: Record<string, string | undefined> = {}) {
     const tenantId = this.tenantContext.getTenantId();
-    const prisma = this.prisma as any;
-    return prisma.inventory.findMany({ where: { tenantId } });
+    const page = Math.max(1, Number(filters.page ?? 1));
+    const limit = Math.max(1, Math.min(200, Number(filters.limit ?? 20)));
+
+    const rows = await this.prisma.inventory.findMany({
+      where: {
+        tenantId,
+        warehouseId: filters.warehouse || undefined,
+        product: filters.sku
+          ? { sku: { contains: filters.sku, mode: 'insensitive' } }
+          : undefined,
+      } as any,
+      include: { product: true },
+    });
+
+    const summaryMap = new Map<
+      string,
+      {
+        productId: string;
+        sku: string;
+        name: string;
+        totalUnits: number;
+        totalUom?: string;
+        batchIds: Set<string>;
+        locationIds: Set<string>;
+      }
+    >();
+
+    rows.forEach((row) => {
+      const existing =
+        summaryMap.get(row.productId) ??
+        {
+          productId: row.productId,
+          sku: row.product?.sku ?? row.productId,
+          name: row.product?.name ?? row.productId,
+          totalUnits: 0,
+          totalUom: row.uom,
+          batchIds: new Set<string>(),
+          locationIds: new Set<string>(),
+        };
+      existing.totalUnits += Number(row.quantity ?? 0);
+      if (row.batchId) {
+        existing.batchIds.add(row.batchId);
+      }
+      existing.locationIds.add(row.locationId);
+      summaryMap.set(row.productId, existing);
+    });
+
+    const items = Array.from(summaryMap.values()).map((entry) => ({
+      productId: entry.productId,
+      sku: entry.sku,
+      name: entry.name,
+      totalUnits: entry.totalUnits,
+      totalUom: entry.totalUom,
+      batchCount: entry.batchIds.size,
+      locationCount: entry.locationIds.size,
+    }));
+
+    items.sort((a, b) => a.sku.localeCompare(b.sku));
+
+    const start = (page - 1) * limit;
+    const paged = items.slice(start, start + limit);
+
+    return {
+      items: paged,
+      page,
+      pageSize: limit,
+      total: items.length,
+    };
+  }
+
+  async listInventoryByLocation(filters: Record<string, string | undefined>) {
+    const tenantId = this.tenantContext.getTenantId();
+    const page = Math.max(1, Number(filters.page ?? 1));
+    const limit = Math.max(1, Math.min(200, Number(filters.limit ?? 20)));
+    const skip = (page - 1) * limit;
+
+    const [total, rows] = await this.prisma.$transaction([
+      this.prisma.inventory.count({ where: { tenantId } }),
+      this.prisma.inventory.findMany({
+        where: { tenantId } as any,
+        include: { product: true, location: true, batch: true },
+        orderBy: { updatedAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return {
+      items: rows.map((row) => ({
+        locationId: row.locationId,
+        locationCode: row.location?.code ?? row.locationId,
+        productId: row.productId,
+        sku: row.product?.sku ?? row.productId,
+        productName: row.product?.name,
+        quantity: Number(row.quantity ?? 0),
+        batch: row.batch?.batchCode ?? null,
+        updatedAt: row.updatedAt,
+      })),
+      page,
+      pageSize: limit,
+      total,
+    };
+  }
+
+  async listInventoryByBatch(filters: Record<string, string | undefined>) {
+    const tenantId = this.tenantContext.getTenantId();
+    const page = Math.max(1, Number(filters.page ?? 1));
+    const limit = Math.max(1, Math.min(200, Number(filters.limit ?? 20)));
+
+    const rows = await this.prisma.inventory.findMany({
+      where: { tenantId, batchId: { not: null } } as any,
+      include: { batch: true, product: true, location: true, warehouse: true },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    const batchMap = new Map<
+      string,
+      {
+        id: string;
+        productId: string;
+        sku: string;
+        productName?: string;
+        quantity: number;
+        expiresAt?: Date | null;
+        warehouseName?: string;
+        locationCode?: string;
+      }
+    >();
+
+    rows.forEach((row) => {
+      if (!row.batchId) return;
+      const existing =
+        batchMap.get(row.batchId) ??
+        {
+          id: row.batch?.batchCode ?? row.batchId,
+          productId: row.productId,
+          sku: row.product?.sku ?? row.productId,
+          productName: row.product?.name,
+          quantity: 0,
+          expiresAt: row.batch?.expiryDate ?? null,
+          warehouseName: row.warehouse?.name,
+          locationCode: row.location?.code,
+        };
+      existing.quantity += Number(row.quantity ?? 0);
+      batchMap.set(row.batchId, existing);
+    });
+
+    const items = Array.from(batchMap.values()).map((entry) => ({
+      batch: entry.id,
+      productId: entry.productId,
+      sku: entry.sku,
+      productName: entry.productName,
+      quantity: entry.quantity,
+      expiresAt: entry.expiresAt ? entry.expiresAt.toISOString() : undefined,
+      warehouseName: entry.warehouseName,
+      locationCode: entry.locationCode,
+    }));
+
+    const start = (page - 1) * limit;
+    const paged = items.slice(start, start + limit);
+
+    return {
+      items: paged,
+      page,
+      pageSize: limit,
+      total: items.length,
+    };
+  }
+
+  async getProductInventoryDetail(productId: string) {
+    const tenantId = this.tenantContext.getTenantId();
+    const product = await this.prisma.product.findFirst({ where: { id: productId, tenantId } as any });
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    const rows = await this.prisma.inventory.findMany({
+      where: { tenantId, productId } as any,
+      include: { batch: true, location: true },
+    });
+
+    const byLocation = new Map<string, number>();
+    const batches = new Map<string, { quantity: number; expiresAt?: string }>();
+
+    rows.forEach((row) => {
+      const locKey = row.location?.code ?? row.locationId;
+      byLocation.set(locKey, (byLocation.get(locKey) ?? 0) + Number(row.quantity ?? 0));
+      if (row.batch?.batchCode) {
+        const batchEntry = batches.get(row.batch.batchCode) ?? {
+          quantity: 0,
+          expiresAt: row.batch.expiryDate?.toISOString(),
+        };
+        batchEntry.quantity += Number(row.quantity ?? 0);
+        batches.set(row.batch.batchCode, batchEntry);
+      }
+    });
+
+    const movements = await this.prisma.movementLine.findMany({
+      where: { tenantId, productId } as any,
+      include: {
+        movementHeader: { include: { reason: true } },
+        fromLocation: true,
+        toLocation: true,
+        product: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+
+    return {
+      productId: product.id,
+      sku: product.sku,
+      name: product.name,
+      batches: Array.from(batches.entries()).map(([batch, entry]) => ({
+        batch,
+        quantity: entry.quantity,
+        expiresAt: entry.expiresAt,
+      })),
+      byLocation: Array.from(byLocation.entries()).map(([location, quantity]) => ({ location, quantity })),
+      recentMovements: movements.map((movement) => ({
+        id: movement.id,
+        type: this.mapMovementType(movement.movementHeader?.movementType),
+        productId: movement.productId,
+        sku: movement.product?.sku ?? movement.productId,
+        productName: movement.product?.name,
+        quantity: Number(movement.quantity ?? 0),
+        fromLocation: movement.fromLocation?.code,
+        toLocation: movement.toLocation?.code,
+        user: movement.movementHeader?.createdBy ?? undefined,
+        createdAt: movement.createdAt,
+        reason: movement.movementHeader?.reason?.label ?? movement.movementHeader?.reference ?? undefined,
+        notes: movement.movementHeader?.notes ?? undefined,
+      })),
+    };
+  }
+
+  async listLowStock() {
+    const tenantId = this.tenantContext.getTenantId();
+    const aggregates = await this.prisma.inventory.groupBy({
+      by: ['productId'],
+      where: { tenantId, stockStatus: StockStatus.AVAILABLE },
+      _sum: { quantity: true },
+      orderBy: { _sum: { quantity: 'asc' } },
+      take: 50,
+    });
+
+    if (!aggregates.length) {
+      return [];
+    }
+
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: aggregates.map((item) => item.productId) } },
+      select: { id: true, sku: true, name: true },
+    });
+    const productMap = new Map(products.map((product) => [product.id, product]));
+
+    const minThreshold = 10;
+    return aggregates
+      .map((item) => {
+        const product = productMap.get(item.productId);
+        const available = Number(item._sum.quantity ?? 0);
+        if (available >= minThreshold) {
+          return null;
+        }
+        const ratio = available / minThreshold;
+        const priority = ratio <= 0.3 ? 'HIGH' : ratio <= 0.6 ? 'MEDIUM' : 'LOW';
+        return {
+          sku: product?.sku ?? item.productId,
+          productName: product?.name ?? undefined,
+          available,
+          min: minThreshold,
+          priority,
+        };
+      })
+      .filter(Boolean);
+  }
+
+  private mapMovementType(type?: MovementType | null) {
+    if (!type) return 'MANUAL';
+    switch (type) {
+      case MovementType.INTERNAL_TRANSFER:
+        return 'INTERNAL_TRANSFER';
+      case MovementType.OUTBOUND_SHIPMENT:
+        return 'REPLENISHMENT';
+      case MovementType.INBOUND_RECEIPT:
+        return 'MANUAL';
+      case MovementType.ADJUSTMENT:
+        return 'MANUAL';
+      default:
+        return 'MANUAL';
+    }
   }
 }

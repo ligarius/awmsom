@@ -12,12 +12,15 @@ import type { PaginatedResult } from "@/types/common";
 import type { Movement } from "@/types/operations";
 import { Button } from "@/components/ui/button";
 import { usePermissions } from "@/hooks/usePermissions";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export default function MovementsPage() {
   const router = useRouter();
   const { canMovementsWrite } = usePermissions();
   const { get } = useApi();
+  const searchParams = useSearchParams();
+  const tenantId = searchParams.get("tenantId");
+  const tenantParam = tenantId ? `?tenantId=${tenantId}` : "";
   const [data, setData] = useState<PaginatedResult<Movement>>({ items: [], page: 1, pageSize: 20, total: 0 });
 
   useEffect(() => {
@@ -45,12 +48,12 @@ export default function MovementsPage() {
         header: "Acciones",
         cell: ({ row }) => (
           <Button variant="ghost" size="sm" asChild>
-            <Link href={`/movements/${row.original.id}`}>Ver</Link>
+            <Link href={`/movements/${row.original.id}${tenantParam}`}>Ver</Link>
           </Button>
         )
       }
     ],
-    []
+    [tenantParam]
   );
 
   return (
@@ -61,7 +64,7 @@ export default function MovementsPage() {
           <p className="text-sm text-muted-foreground">Registro detallado de traslados internos</p>
         </div>
         <Button asChild>
-          <Link href="/movements/create">Crear movimiento</Link>
+          <Link href={`/movements/create${tenantParam}`}>Crear movimiento</Link>
         </Button>
       </div>
 

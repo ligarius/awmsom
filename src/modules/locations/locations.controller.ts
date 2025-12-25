@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
 import { PermissionAction, PermissionResource } from '@prisma/client';
 import { Permissions } from '../../decorators/permissions.decorator';
 import { LocationsService } from './locations.service';
@@ -9,13 +9,19 @@ export class LocationsController {
 
   @Post()
   @Permissions(PermissionResource.LOCATION, PermissionAction.CREATE)
-  create(@Body() body: { warehouseId: string; code: string; description?: string }) {
+  create(@Body() body: { warehouseId: string; code: string; description?: string; zone?: string }) {
     return this.locationsService.create(body);
   }
 
   @Get('health')
   health() {
     return { status: 'ok', module: 'locations' };
+  }
+
+  @Get('suggestions')
+  @Permissions(PermissionResource.LOCATION, PermissionAction.READ)
+  suggest(@Query('warehouseId') warehouseId: string) {
+    return this.locationsService.suggest(warehouseId);
   }
 
   @Get()
@@ -34,7 +40,7 @@ export class LocationsController {
   @Permissions(PermissionResource.LOCATION, PermissionAction.UPDATE)
   update(
     @Param('id') id: string,
-    @Body() body: { warehouseId?: string; code?: string; description?: string },
+    @Body() body: { warehouseId?: string; code?: string; description?: string; zone?: string },
   ) {
     return this.locationsService.update(id, body);
   }

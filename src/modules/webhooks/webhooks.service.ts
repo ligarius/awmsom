@@ -1,5 +1,4 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import axios from 'axios';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateWebhookSubscriptionDto } from './dto/create-webhook-subscription.dto';
@@ -35,6 +34,7 @@ export class WebhooksService {
 
   async emitEvent(tenantId: string, eventType: string, payload: any) {
     const prisma = this.prisma as any;
+    const axios = (await import('axios')).default;
     const targets = await prisma.webhookSubscription.findMany({
       where: { tenantId, eventType, isActive: true },
     });

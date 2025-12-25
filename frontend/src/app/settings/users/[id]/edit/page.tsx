@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,12 +11,16 @@ import { FormSection } from "@/components/FormSection";
 import { useApi } from "@/hooks/useApi";
 import { toast } from "@/components/ui/use-toast";
 import type { TenantUser } from "@/types/saas";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function EditUserPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const tenantId = searchParams.get("tenantId");
   const { get, patch, post } = useApi();
   const [form, setForm] = useState<{ fullName: string; role: string; password?: string; status?: string } | null>(null);
+  const roleOptions = ["ADMIN", "SUPERVISOR", "OPERATOR"];
 
   useEffect(() => {
     get<TenantUser>(`/users/${params.id}`)
@@ -28,7 +32,7 @@ export default function EditUserPage() {
     if (!form) return;
     await patch(`/users/${params.id}`, form);
     toast({ title: "Usuario actualizado" });
-    router.push(`/settings/users/${params.id}`);
+    router.push(tenantId ? `/settings/users/${params.id}?tenantId=${tenantId}` : `/settings/users/${params.id}`);
   };
 
   const toggle = async () => {
@@ -57,7 +61,18 @@ export default function EditUserPage() {
               </div>
               <div>
                 <Label htmlFor="role">Rol</Label>
-                <Input id="role" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} />
+                <Select value={form.role} onValueChange={(value) => setForm({ ...form, role: value })}>
+                  <SelectTrigger id="role">
+                    <SelectValue placeholder="Selecciona un rol" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {roleOptions.map((role) => (
+                      <SelectItem key={role} value={role}>
+                        {role}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label htmlFor="password">Nueva contraseña</Label>

@@ -37,6 +37,7 @@ import { ReplenishmentModule } from './modules/replenishment/replenishment.modul
 import { SlottingModule } from './modules/slotting/slotting.module';
 import { WavesModule } from './modules/waves/waves.module';
 import { ComplianceModule } from './modules/compliance/compliance.module';
+import { ReportsModule } from './modules/reports/reports.module';
 import { configValidationSchema } from './config/validation';
 
 @Module({
@@ -78,6 +79,7 @@ import { configValidationSchema } from './config/validation';
     SlottingModule,
     WavesModule,
     ComplianceModule,
+    ReportsModule,
   ],
   providers: [
     RateLimitService,

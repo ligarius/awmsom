@@ -4,18 +4,18 @@ import { IsNumber } from 'class-validator';
 
 class OutboundOrderLineInputDto {
   @IsUUID()
-  productId: string;
+  productId!: string;
 
   @IsNumber()
-  requestedQty: number;
+  requestedQty!: number;
 
   @IsString()
-  uom: string;
+  uom!: string;
 }
 
 export class CreateOutboundOrderDto {
   @IsUUID()
-  warehouseId: string;
+  warehouseId!: string;
 
   @IsOptional()
   @IsString()
@@ -32,5 +32,5 @@ export class CreateOutboundOrderDto {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => OutboundOrderLineInputDto)
-  lines: OutboundOrderLineInputDto[];
+  lines!: OutboundOrderLineInputDto[];
 }

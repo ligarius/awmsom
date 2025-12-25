@@ -3,10 +3,10 @@ import { IsBoolean, IsIn, IsNumber, IsOptional, IsString, IsUUID, Max, Min } fro
 
 export class GenerateSlottingRuleDto {
   @IsUUID()
-  warehouseId: string;
+  warehouseId!: string;
 
   @IsUUID()
-  productId: string;
+  productId!: string;
 
   @IsOptional()
   @IsIn(['FAST', 'MEDIUM', 'SLOW'])
@@ -38,21 +38,21 @@ export class RelocationSuggestionDto {
 
 export class WarehouseBalanceDto {
   @IsUUID()
-  productId: string;
+  productId!: string;
 
   @IsUUID()
-  sourceWarehouseId: string;
+  sourceWarehouseId!: string;
 
   @IsUUID()
-  targetWarehouseId: string;
+  targetWarehouseId!: string;
 
   @Type(() => Number)
   @IsNumber()
   @Min(1)
-  quantity: number;
+  quantity!: number;
 
   @IsString()
-  uom: string;
+  uom!: string;
 
   @IsOptional()
   @IsBoolean()

@@ -54,6 +54,10 @@ export function InboundReceiveStep({ inbound, onCompleted }: InboundReceiveStepP
       toast({ title: "Falta lote", description: "Este SKU requiere capturar lote", variant: "destructive" });
       return;
     }
+    if (!location.trim()) {
+      toast({ title: "Falta ubicación", description: "Selecciona una ubicación válida", variant: "destructive" });
+      return;
+    }
     setLoading(true);
     try {
       await post(`/inbound/${inbound.id}/receive-line`, {

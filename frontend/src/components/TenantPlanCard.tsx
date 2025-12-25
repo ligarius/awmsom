@@ -1,5 +1,6 @@
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { formatPlanLabel } from "@/lib/plans";
 
 type Props = {
   plan: string;
@@ -18,7 +19,7 @@ export function TenantPlanCard({ plan, userLimit, operationLimit, onChangePlan }
       <CardContent className="space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">Plan</span>
-          <span className="font-semibold">{plan}</span>
+          <span className="font-semibold">{formatPlanLabel(plan)}</span>
         </div>
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">Límite de usuarios</span>

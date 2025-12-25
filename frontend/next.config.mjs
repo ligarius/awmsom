@@ -4,10 +4,7 @@
  * (headers, rewrites, etc.) should be added in future sprints.
  */
 const nextConfig = {
-  reactStrictMode: true,
-  experimental: {
-    serverActions: true
-  }
+  reactStrictMode: true
 };
 
 export default nextConfig;

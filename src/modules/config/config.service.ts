@@ -6,6 +6,8 @@ import { UpsertPickingMethodConfigDto } from './dto/upsert-picking-method-config
 import { UpsertWarehouseZoneConfigDto } from './dto/upsert-warehouse-zone-config.dto';
 import { UpsertInventoryPolicyDto } from './dto/upsert-inventory-policy.dto';
 import { UpsertOutboundRuleDto } from './dto/upsert-outbound-rule.dto';
+import { UpsertMovementReasonDto } from './dto/upsert-movement-reason.dto';
+import { DEFAULT_MOVEMENT_REASONS } from './movement-reasons.constants';
 
 @Injectable()
 export class ConfigService {
@@ -34,6 +36,88 @@ export class ConfigService {
   async getPickingMethods(tenantId: string, warehouseId?: string) {
     return this.prisma.pickingMethodConfig.findMany({
       where: { tenantId, warehouseId: warehouseId ?? undefined },
+    });
+  }
+
+  async getMovementReasons(tenantId: string) {
+    const existing = await this.prisma.movementReasonConfig.findMany({
+      where: { tenantId },
+      orderBy: { label: 'asc' },
+    });
+
+    if (existing.length > 0) {
+      return existing;
+    }
+
+    await this.seedDefaultMovementReasons(tenantId);
+    return this.prisma.movementReasonConfig.findMany({
+      where: { tenantId },
+      orderBy: { label: 'asc' },
+    });
+  }
+
+  async upsertMovementReason(tenantId: string, dto: UpsertMovementReasonDto) {
+    const code = dto.code.trim().toUpperCase();
+    const label = dto.label.trim();
+
+    if (!code || !label) {
+      throw new BadRequestException('code and label are required');
+    }
+
+    if (dto.isDefault) {
+      await this.prisma.movementReasonConfig.updateMany({
+        where: { tenantId },
+        data: { isDefault: false },
+      });
+    }
+
+    if (dto.id) {
+      const existing = await this.prisma.movementReasonConfig.findFirst({ where: { id: dto.id, tenantId } });
+      if (!existing) {
+        throw new NotFoundException('Movement reason not found');
+      }
+
+      if (existing.code !== code) {
+        const duplicate = await this.prisma.movementReasonConfig.findFirst({ where: { tenantId, code } });
+        if (duplicate) {
+          throw new BadRequestException('Movement reason code already exists');
+        }
+      }
+
+      return this.prisma.movementReasonConfig.update({
+        where: { id: existing.id },
+        data: {
+          code,
+          label,
+          description: dto.description?.trim() || null,
+          isActive: dto.isActive ?? existing.isActive,
+          isDefault: dto.isDefault ?? existing.isDefault,
+        },
+      });
+    }
+
+    const existingByCode = await this.prisma.movementReasonConfig.findFirst({ where: { tenantId, code } });
+    if (existingByCode) {
+      return this.prisma.movementReasonConfig.update({
+        where: { id: existingByCode.id },
+        data: {
+          label,
+          description: dto.description?.trim() || null,
+          isActive: dto.isActive ?? existingByCode.isActive,
+          isDefault: dto.isDefault ?? existingByCode.isDefault,
+        },
+      });
+    }
+
+    return this.prisma.movementReasonConfig.create({
+      data: {
+        tenantId,
+        code,
+        label,
+        description: dto.description?.trim() || null,
+        isActive: dto.isActive ?? true,
+        isDefault: dto.isDefault ?? false,
+      },
     });
   }
 
@@ -194,6 +278,24 @@ export class ConfigService {
     }
 
     return this.prisma.outboundRule.create({ data: { tenantId, warehouseId: targetWarehouseId, ...dto } });
+  }
+
+  private async seedDefaultMovementReasons(tenantId: string) {
+    const existing = await this.prisma.movementReasonConfig.findMany({ where: { tenantId } });
+    if (existing.length > 0) {
+      return;
+    }
+
+    await this.prisma.movementReasonConfig.createMany({
+      data: DEFAULT_MOVEMENT_REASONS.map((reason) => ({
+        tenantId,
+        code: reason.code,
+        label: reason.label,
+        description: reason.description ?? null,
+        isActive: true,
+        isDefault: reason.isDefault ?? false,
+      })),
+    });
   }
 
   private async assertWarehouseOwnership(tenantId: string, warehouseId: string) {

@@ -17,9 +17,17 @@ UPDATE "ApiKey"
 SET "keyHash" = encode(digest(COALESCE("keyHash", ''), 'sha256'), 'hex')
 WHERE "keyHash" IS NOT NULL AND "keyHash" NOT LIKE '[0-9a-f]%'::text AND length("keyHash") <> 64;
 
-UPDATE "ApiKey"
-SET "keyHash" = encode(digest("key", 'sha256'), 'hex')
-WHERE "keyHash" IS NULL AND "key" IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'ApiKey' AND column_name = 'key'
+  ) THEN
+    UPDATE "ApiKey"
+    SET "keyHash" = encode(digest("key", 'sha256'), 'hex')
+    WHERE "keyHash" IS NULL AND "key" IS NOT NULL;
+  END IF;
+END $$;
 
 -- Ensure any rows missing both plaintext and hashed values still get a deterministic placeholder
 UPDATE "ApiKey"

@@ -1,14 +1,20 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { AUTH_TOKEN_COOKIE } from "@/lib/constants";
 import type { AuthUser } from "@/types/auth";
+import { canAccessSaas, resolveLandingRoute } from "@/lib/navigation";
 
 const protectedRoutes = ["/dashboard", "/inbound", "/outbound", "/inventory", "/settings", "/saas", "/onboarding"];
 
-const routePermissions: { prefix: string; permission?: string; role?: string }[] = [
-  { prefix: "/saas", permission: "saas:access", role: "SUPER_ADMIN" },
-  { prefix: "/settings/users", permission: "users:manage" },
-  { prefix: "/settings/roles", permission: "roles:manage" },
-  { prefix: "/settings/compliance", permission: "compliance:manage" }
+const routePermissions: {
+  prefix: string;
+  permission?: string;
+  role?: string;
+  allow?: (user: AuthUser) => boolean;
+}[] = [
+  { prefix: "/saas", allow: canAccessSaas },
+  { prefix: "/settings/users", permission: "USERS:MANAGE", role: "ADMIN" },
+  { prefix: "/settings/roles", permission: "ROLES:MANAGE", role: "ADMIN" },
+  { prefix: "/settings/compliance", permission: "COMPLIANCE:MANAGE", role: "ADMIN" }
 ];
 
 const validationCache = new Map<string, { user: AuthUser | null; expiresAt: number }>();
@@ -45,9 +51,27 @@ async function validateSession(request: NextRequest, token: string): Promise<Aut
   }
 }
 
+function normalizePermission(permission: string) {
+  return permission.trim().replace(/_/g, ":").toUpperCase();
+}
+
+function hasPermission(user: AuthUser, permission?: string) {
+  if (!permission) return false;
+  const normalizedTarget = normalizePermission(permission);
+  const permissions = user.permissions ?? [];
+  return permissions.some((perm) => normalizePermission(perm) === normalizedTarget);
+}
+
+function hasRole(user: AuthUser, role?: string) {
+  if (!role) return false;
+  const roles = user.roles ?? (user.role ? [user.role] : []);
+  return roles.includes(role);
+}
+
 export async function middleware(request: NextRequest) {
   const token = request.cookies.get(AUTH_TOKEN_COOKIE)?.value;
   const isProtected = protectedRoutes.some((path) => request.nextUrl.pathname.startsWith(path));
+  const isRoot = request.nextUrl.pathname === "/";
 
   if (isProtected && !token) {
     const loginUrl = new URL("/login", request.url);
@@ -56,7 +80,7 @@ export async function middleware(request: NextRequest) {
 
   const isLogin = request.nextUrl.pathname === "/login";
 
-  if (token && (isProtected || isLogin)) {
+  if (token && (isProtected || isLogin || isRoot)) {
     const user = await validateSession(request, token);
 
     if (!user) {
@@ -66,15 +90,30 @@ export async function middleware(request: NextRequest) {
 
     const rule = routePermissions.find((rule) => request.nextUrl.pathname.startsWith(rule.prefix));
     if (rule) {
-      const hasRole = rule.role ? user.role === rule.role : true;
-      const hasPermission = rule.permission ? user.permissions?.includes(rule.permission) : true;
-      if (!hasRole || !hasPermission) {
+      const isAllowed = rule.allow
+        ? rule.allow(user)
+        : (() => {
+            const roleAllowed = hasRole(user, rule.role);
+            const permissionAllowed = hasPermission(user, rule.permission);
+            return rule.role && rule.permission
+              ? roleAllowed || permissionAllowed
+              : rule.role
+              ? roleAllowed
+              : rule.permission
+              ? permissionAllowed
+              : true;
+          })();
+      if (!isAllowed) {
         return NextResponse.redirect(new URL("/forbidden", request.url));
       }
     }
 
     if (isLogin) {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
+      return NextResponse.redirect(new URL(resolveLandingRoute(user), request.url));
+    }
+
+    if (isRoot) {
+      return NextResponse.redirect(new URL(resolveLandingRoute(user), request.url));
     }
   }
 

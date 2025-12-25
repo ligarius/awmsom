@@ -12,6 +12,7 @@ import type {
   OAuthStartResponse
 } from "@/types/auth";
 import { toast } from "@/components/ui/use-toast";
+import { resolveLandingRoute } from "@/lib/navigation";
 
 /**
  * Hook that centralizes auth operations for pages and components.
@@ -21,12 +22,11 @@ import { toast } from "@/components/ui/use-toast";
  */
 export function useAuth() {
   const router = useRouter();
-  const { user, setUser, clear } = useUserStore();
+  const { user, setUser, setAccessToken, clear } = useUserStore();
   const [initializing, setInitializing] = useState(true);
   const [mfaChallenge, setMfaChallenge] = useState<AuthMfaRequiredResponse | null>(null);
   const [pendingCredentials, setPendingCredentials] = useState<Omit<AuthCredentials, "challengeId" | "mfaCode" | "factorId"> | null>(null);
   const [mfaCode, setMfaCode] = useState("");
-  const [lastTenantId, setLastTenantId] = useState<string | null>(null);
 
   const getUser = useCallback(async () => {
     try {
@@ -48,32 +48,23 @@ export function useAuth() {
   const login = useCallback(
     async (credentials: AuthCredentials) => {
       try {
-        const payload: AuthCredentials = {
-          ...credentials,
-          tenantId: credentials.tenantId || lastTenantId || ""
-        };
-
         if (!credentials.mfaCode) {
-          setPendingCredentials({ email: payload.email, password: payload.password, tenantId: payload.tenantId });
-        }
-
-        if (payload.tenantId) {
-          setLastTenantId(payload.tenantId);
+          setPendingCredentials({ email: credentials.email, password: credentials.password });
         }
 
         if (mfaChallenge) {
-          payload.challengeId = credentials.challengeId ?? mfaChallenge.challengeId;
-          payload.factorId = credentials.factorId ?? mfaChallenge.factor?.id;
+          credentials.challengeId = credentials.challengeId ?? mfaChallenge.challengeId;
+          credentials.factorId = credentials.factorId ?? mfaChallenge.factor?.id;
         }
 
-        if (mfaCode && payload.challengeId === mfaChallenge?.challengeId && !payload.mfaCode) {
-          payload.mfaCode = mfaCode;
+        if (mfaCode && credentials.challengeId === mfaChallenge?.challengeId && !credentials.mfaCode) {
+          credentials.mfaCode = mfaCode;
         }
 
         const response = await fetch("/api/auth/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(credentials),
           credentials: "include"
         });
         const data = (await response.json()) as AuthResponse & { message?: string };
@@ -99,15 +90,13 @@ export function useAuth() {
         setMfaChallenge(null);
         setMfaCode("");
         setPendingCredentials(null);
-        if (data.user.tenantId) {
-          setLastTenantId(data.user.tenantId);
-        }
+        setAccessToken(data.accessToken);
         setUser(data.user);
         toast({
           title: "Bienvenido",
           description: `${data.user.fullName} listo para operar`
         });
-        router.replace("/dashboard");
+        router.replace(resolveLandingRoute(data.user));
         return data;
       } catch (error) {
         toast({
@@ -118,7 +107,7 @@ export function useAuth() {
         throw error;
       }
     },
-    [lastTenantId, mfaChallenge, mfaCode, router, setLastTenantId, setMfaChallenge, setUser]
+    [mfaChallenge, mfaCode, router, setAccessToken, setMfaChallenge, setUser]
   );
 
   const submitMfaCode = useCallback(

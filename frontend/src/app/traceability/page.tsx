@@ -13,7 +13,7 @@ import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
 import { Search, Target } from "lucide-react";
 
 export default function TraceabilityHomePage() {
-  const { allowed, initializing } = usePermissionGuard("TRACEABILITY_READ");
+  const { allowed, initializing } = usePermissionGuard("REPORTS:READ");
   const router = useRouter();
   const [sku, setSku] = useState("");
   const [batch, setBatch] = useState("");

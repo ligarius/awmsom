@@ -17,7 +17,8 @@ export class RegisterInventoryMovementUseCase {
     toLocationId: string;
     lotCode?: string;
     createdBy: string;
-    reason?: string;
+    reasonId?: string;
+    notes?: string;
     createdAt?: Date;
   }): Promise<InventoryMovement> {
     const timestamped = new InventoryMovement(
@@ -29,7 +30,8 @@ export class RegisterInventoryMovementUseCase {
       input.lotCode,
       input.createdAt,
       input.createdBy,
-      input.reason,
+      input.reasonId,
+      input.notes,
     );
 
     const movement = timestamped.createdAt ? timestamped : timestamped.withTimestamp(new Date());

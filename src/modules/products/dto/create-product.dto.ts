@@ -2,10 +2,10 @@ import { IsBoolean, IsOptional, IsString } from 'class-validator';
 
 export class CreateProductDto {
   @IsString()
-  code: string;
+  code!: string;
 
   @IsString()
-  name: string;
+  name!: string;
 
   @IsOptional()
   @IsBoolean()
@@ -16,7 +16,7 @@ export class CreateProductDto {
   requiresExpiryDate?: boolean;
 
   @IsString()
-  defaultUom: string;
+  defaultUom!: string;
 
   @IsOptional()
   @IsBoolean()

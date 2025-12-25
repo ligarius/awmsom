@@ -20,7 +20,7 @@ export default function TraceabilityCustomerPage() {
   const initialCustomer = searchParams.get("id") ?? "";
   const [customer, setCustomer] = useState(initialCustomer);
   const [queryCustomer, setQueryCustomer] = useState(initialCustomer);
-  const { allowed, initializing } = usePermissionGuard("TRACEABILITY_READ");
+  const { allowed, initializing } = usePermissionGuard("REPORTS:READ");
   const { get } = useApi();
 
   const { data, isLoading, isError } = useQuery({

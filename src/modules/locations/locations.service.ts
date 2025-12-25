@@ -9,7 +9,7 @@ export class LocationsService {
     private readonly tenantContext: TenantContextService,
   ) {}
 
-  async create(data: { warehouseId: string; code: string; description?: string }) {
+  async create(data: { warehouseId: string; code: string; description?: string; zone?: string }) {
     const tenantId = this.tenantContext.getTenantId();
     await this.ensureWarehouseOwnership(data.warehouseId, tenantId);
     await this.assertUniqueCode(tenantId, data.warehouseId, data.code);
@@ -18,7 +18,7 @@ export class LocationsService {
       data: {
         ...data,
         tenantId,
-        zone: 'DEFAULT',
+        zone: data.zone ?? 'DEFAULT',
       },
     });
   }
@@ -37,7 +37,7 @@ export class LocationsService {
     return location;
   }
 
-  async update(id: string, data: { warehouseId?: string; code?: string; description?: string }) {
+  async update(id: string, data: { warehouseId?: string; code?: string; description?: string; zone?: string }) {
     const tenantId = this.tenantContext.getTenantId();
     const existing = await this.prisma.location.findFirst({ where: { id, tenantId } });
     if (!existing) {
@@ -58,6 +58,7 @@ export class LocationsService {
         warehouseId,
         code: targetCode,
         description: data.description ?? existing.description,
+        zone: data.zone ?? existing.zone,
       },
     });
   }
@@ -70,6 +71,30 @@ export class LocationsService {
     }
 
     return this.prisma.location.delete({ where: { id } });
+  }
+
+  async suggest(warehouseId: string) {
+    const tenantId = this.tenantContext.getTenantId();
+    if (!warehouseId) {
+      throw new BadRequestException('Warehouse is required');
+    }
+
+    await this.ensureWarehouseOwnership(warehouseId, tenantId);
+
+    const location = await this.prisma.location.findFirst({
+      where: { tenantId, warehouseId, isActive: true },
+      orderBy: { code: 'asc' },
+    });
+
+    if (!location) {
+      throw new NotFoundException('No locations available');
+    }
+
+    return {
+      code: location.code,
+      distance: 'N/A',
+      reason: 'Ubicación sugerida por disponibilidad',
+    };
   }
 
   private async ensureWarehouseOwnership(warehouseId: string, tenantId: string) {

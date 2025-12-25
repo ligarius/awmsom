@@ -1,3 +1,5 @@
+"use client";
+
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Inbox } from "lucide-react";
@@ -18,8 +20,8 @@ export function EmptyState({
   className
 }: EmptyStateProps) {
   return (
-    <div className={cn("flex flex-col items-center justify-center gap-3 rounded-lg border bg-card p-8 text-center", className)}>
-      <div className="rounded-full bg-muted p-3">
+    <div className={cn("flex flex-col items-center justify-center gap-3 rounded-lg border bg-card p-6 text-center", className)}>
+      <div className="rounded-full bg-muted p-2">
         <Inbox className="h-6 w-6 text-primary" />
       </div>
       <div className="space-y-1">

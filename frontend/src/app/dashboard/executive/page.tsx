@@ -26,7 +26,7 @@ function formatNumber(value?: number) {
 }
 
 export default function ExecutiveDashboardPage() {
-  const { allowed, initializing } = usePermissionGuard("DASHBOARD_READ");
+  const { allowed, initializing } = usePermissionGuard("REPORTS:READ");
   const { get } = useApi();
 
   const { data, isLoading, isError, refetch } = useQuery({

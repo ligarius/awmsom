@@ -13,21 +13,21 @@ export class SlottingController {
   constructor(private readonly service: SlottingService, private readonly tenantContext: TenantContextService) {}
 
   @Post('config')
-  @Permissions(PermissionResource.CONFIG, PermissionAction.CONFIG)
+  @Permissions(PermissionResource.TENANT_CONFIG, PermissionAction.CONFIG)
   createConfig(@Body() dto: CreateSlottingConfigDto) {
     const tenantId = this.tenantContext.getTenantId();
     return this.service.createConfig(tenantId, dto);
   }
 
   @Patch('config/:id')
-  @Permissions(PermissionResource.CONFIG, PermissionAction.CONFIG)
+  @Permissions(PermissionResource.TENANT_CONFIG, PermissionAction.CONFIG)
   updateConfig(@Param('id', new ParseUUIDPipe()) id: string, @Body() dto: UpdateSlottingConfigDto) {
     const tenantId = this.tenantContext.getTenantId();
     return this.service.updateConfig(tenantId, id, dto);
   }
 
   @Get('config')
-  @Permissions(PermissionResource.CONFIG, PermissionAction.CONFIG)
+  @Permissions(PermissionResource.TENANT_CONFIG, PermissionAction.CONFIG)
   listConfig(@Query('warehouseId') warehouseId?: string) {
     const tenantId = this.tenantContext.getTenantId();
     return this.service.listConfigs(tenantId, warehouseId);

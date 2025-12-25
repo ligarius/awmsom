@@ -39,6 +39,10 @@ const config: Config = {
         card: {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))"
+        },
+        popover: {
+          DEFAULT: "hsl(var(--popover))",
+          foreground: "hsl(var(--popover-foreground))"
         }
       },
       borderRadius: {
@@ -47,10 +51,34 @@ const config: Config = {
         sm: "calc(var(--radius) - 4px)"
       },
       fontFamily: {
-        sans: ["Inter", ...fontFamily.sans]
+        sans: ["var(--font-sans)", ...fontFamily.sans],
+        display: ["var(--font-display)", ...fontFamily.sans]
+      },
+      fontSize: {
+        sm: ["var(--font-size-sm)", { lineHeight: "var(--line-height-sm)" }],
+        base: ["var(--font-size-base)", { lineHeight: "var(--line-height-base)" }],
+        lg: ["var(--font-size-lg)", { lineHeight: "var(--line-height-lg)" }],
+        xl: ["var(--font-size-xl)", { lineHeight: "var(--line-height-xl)" }],
+        "2xl": ["var(--font-size-2xl)", { lineHeight: "var(--line-height-xl)" }]
+      },
+      spacing: {
+        4: "var(--space-4)",
+        8: "var(--space-8)",
+        12: "var(--space-12)",
+        16: "var(--space-16)",
+        24: "var(--space-24)"
+      },
+      height: {
+        control: "var(--control-height)",
+        "control-sm": "var(--control-height-sm)"
+      },
+      width: {
+        control: "var(--control-height)",
+        "control-sm": "var(--control-height-sm)"
       },
       boxShadow: {
-        card: "0 8px 30px rgba(0, 0, 0, 0.07)"
+        card: "var(--shadow-card)",
+        panel: "var(--shadow-panel)"
       }
     }
   },

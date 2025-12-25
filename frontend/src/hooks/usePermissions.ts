@@ -1,50 +1,64 @@
 "use client";
 
 import { hasPermission, hasRole } from "@/lib/auth";
-import { useMemo } from "react";
+import { canAccessSaas } from "@/lib/navigation";
+import { useUserStore } from "@/store/user.store";
+import { useAuthContext } from "@/providers/AuthProvider";
 
 /**
  * Hook ligero que expone permisos de alto nivel para simplificar la UI.
  * Usa las funciones de auth que leen del store global de usuario.
  */
 export function usePermissions() {
-  const canRead = useMemo(() => hasPermission("read"), []);
-  const canWrite = useMemo(() => hasPermission("write"), []);
-  const canManage = useMemo(() => hasPermission("manage") || hasRole("ADMIN"), []);
-  const canAccessSaaS = useMemo(() => hasPermission("saas:access") || hasRole("SUPER_ADMIN"), []);
-  const canReadWmsConfig = useMemo(() => hasPermission("CONFIG_WMS_READ") || hasRole("ADMIN"), []);
-  const canWriteWmsConfig = useMemo(() => hasPermission("CONFIG_WMS_WRITE") || hasRole("ADMIN"), []);
+  const { initializing } = useAuthContext();
+  const user = useUserStore((state) => state.user);
 
-  const canInboundRead = useMemo(() => hasPermission("INBOUND_READ"), []);
-  const canInboundExecute = useMemo(() => hasPermission("INBOUND_EXECUTE"), []);
-  const canInventoryRead = useMemo(() => hasPermission("INVENTORY_READ"), []);
-  const canMovementsWrite = useMemo(() => hasPermission("MOVEMENTS_WRITE"), []);
-  const canAdjustmentsWrite = useMemo(() => hasPermission("ADJUSTMENT_WRITE"), []);
-  const canCycleCountCreate = useMemo(() => hasPermission("CYCLECOUNT_CREATE"), []);
-  const canCycleCountExecute = useMemo(() => hasPermission("CYCLECOUNT_EXECUTE"), []);
-  const canOutboundRead = useMemo(() => hasPermission("OUTBOUND_READ"), []);
-  const canOutboundCreate = useMemo(() => hasPermission("OUTBOUND_CREATE"), []);
-  const canOutboundRelease = useMemo(() => hasPermission("OUTBOUND_RELEASE"), []);
-  const canPickingRead = useMemo(() => hasPermission("PICKING_READ"), []);
-  const canPickingExecute = useMemo(() => hasPermission("PICKING_EXECUTE"), []);
-  const canWaveCreate = useMemo(() => hasPermission("WAVES_CREATE"), []);
-  const canWavePlan = useMemo(() => hasPermission("WAVES_PLAN"), []);
-  const canWaveRelease = useMemo(() => hasPermission("WAVES_RELEASE"), []);
-  const canPackingExecute = useMemo(() => hasPermission("PACKING_EXECUTE"), []);
-  const canShipmentsRead = useMemo(() => hasPermission("SHIPMENTS_READ"), []);
-  const canShipmentsExecute = useMemo(() => hasPermission("SHIPMENTS_EXECUTE"), []);
-  const canReplenishmentRead = useMemo(() => hasPermission("REPLENISHMENT_READ"), []);
-  const canReplenishmentApprove = useMemo(() => hasPermission("REPLENISHMENT_APPROVE"), []);
-  const canReplenishmentExecute = useMemo(() => hasPermission("REPLENISHMENT_EXECUTE"), []);
-  const canReplenishmentConfig = useMemo(() => hasPermission("REPLENISHMENT_CONFIG"), []);
-  const canSlottingRead = useMemo(() => hasPermission("SLOTTING_READ"), []);
-  const canSlottingApprove = useMemo(() => hasPermission("SLOTTING_APPROVE"), []);
-  const canSlottingExecute = useMemo(() => hasPermission("SLOTTING_EXECUTE"), []);
-  const canSlottingConfig = useMemo(() => hasPermission("SLOTTING_CONFIG"), []);
-  const canInventoryAdvancedRead = useMemo(() => hasPermission("INVENTORY_ADVANCED_READ"), []);
-  const canManageCompliance = useMemo(() => hasPermission("compliance:manage") || hasRole("ADMIN"), []);
+  const hasAnyPermission = (...permissions: string[]) => permissions.some((permission) => hasPermission(permission));
+  const isPlatform = hasRole("OWNER") || hasRole("PLATFORM_ADMIN");
+  const isTenantAdmin = hasRole("ADMIN");
+  const isLoading = initializing && !user;
+  const allowAll = isPlatform || isTenantAdmin || isLoading;
+
+  const canRead = allowAll || hasPermission("READ");
+  const canWrite = allowAll || hasPermission("UPDATE");
+  const canManage = allowAll || hasAnyPermission("TENANT_CONFIG:MANAGE", "USERS:MANAGE", "ROLES:MANAGE");
+  const canAccessSaaS = canAccessSaas(user);
+  const canReadWmsConfig = allowAll || hasAnyPermission("TENANT_CONFIG:READ", "TENANT_CONFIG:CONFIG", "TENANT_CONFIG:UPDATE");
+  const canWriteWmsConfig = allowAll || hasAnyPermission("TENANT_CONFIG:UPDATE", "TENANT_CONFIG:CONFIG");
+
+  const canInboundRead = allowAll || hasPermission("INBOUND:READ");
+  const canInboundExecute = allowAll || hasAnyPermission("INBOUND:CREATE", "INBOUND:UPDATE", "INBOUND:APPROVE");
+  const canInventoryRead = allowAll || hasPermission("INVENTORY:READ");
+  const canMovementsWrite = allowAll || hasAnyPermission("INVENTORY:UPDATE", "ADJUSTMENT:CREATE");
+  const canAdjustmentsWrite = allowAll || hasAnyPermission("ADJUSTMENT:CREATE", "ADJUSTMENT:UPDATE");
+  const canCycleCountCreate = allowAll || hasPermission("CYCLE_COUNT:CREATE");
+  const canCycleCountExecute = allowAll || hasAnyPermission("CYCLE_COUNT:UPDATE", "CYCLE_COUNT:APPROVE");
+  const canOutboundRead = allowAll || hasPermission("OUTBOUND:READ");
+  const canOutboundCreate = allowAll || hasPermission("OUTBOUND:CREATE");
+  const canOutboundRelease = allowAll || hasAnyPermission("OUTBOUND:UPDATE", "OUTBOUND:APPROVE");
+  const canPickingRead = allowAll || hasPermission("PICKING:READ");
+  const canPickingExecute = allowAll || hasAnyPermission("PICKING:UPDATE", "PICKING:APPROVE", "PICKING:CREATE");
+  const canWaveCreate = allowAll || hasAnyPermission("OUTBOUND:CREATE", "PICKING:CREATE");
+  const canWavePlan = allowAll || hasAnyPermission("OUTBOUND:UPDATE", "PICKING:UPDATE");
+  const canWaveRelease = allowAll || hasAnyPermission("OUTBOUND:APPROVE", "PICKING:APPROVE");
+  const canPackingExecute = allowAll || hasAnyPermission("PACKING:UPDATE", "PACKING:CREATE");
+  const canShipmentsRead = allowAll || hasPermission("SHIPMENT:READ");
+  const canShipmentsExecute = allowAll || hasAnyPermission("SHIPMENT:UPDATE", "SHIPMENT:APPROVE", "SHIPMENT:CREATE");
+  const canReplenishmentRead = allowAll || hasPermission("INVENTORY:READ");
+  const canReplenishmentApprove = allowAll || hasPermission("INVENTORY:APPROVE");
+  const canReplenishmentExecute = allowAll || hasAnyPermission("INVENTORY:UPDATE", "INVENTORY:APPROVE");
+  const canReplenishmentConfig = allowAll || hasAnyPermission("INVENTORY:CONFIG", "TENANT_CONFIG:CONFIG");
+  const canSlottingRead = allowAll || hasPermission("INVENTORY:READ");
+  const canSlottingApprove = allowAll || hasPermission("INVENTORY:APPROVE");
+  const canSlottingExecute = allowAll || hasAnyPermission("INVENTORY:UPDATE", "INVENTORY:APPROVE");
+  const canSlottingConfig = allowAll || hasAnyPermission("INVENTORY:CONFIG", "TENANT_CONFIG:CONFIG");
+  const canInventoryAdvancedRead = allowAll || hasPermission("INVENTORY:READ");
+  const canManageCompliance = allowAll || hasAnyPermission("COMPLIANCE:MANAGE", "COMPLIANCE:CONFIG");
 
   return {
+    isLoading,
+    isPlatform,
+    isTenantAdmin,
     canRead,
     canWrite,
     canManage,

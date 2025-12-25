@@ -8,9 +8,9 @@ export class LoginDto {
   @IsNotEmpty()
   password!: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  tenantId!: string;
+  tenantId?: string;
 
   @IsOptional()
   @IsString()

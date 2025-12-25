@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 
-type ServiceName = 'inventory' | 'outbound' | 'general';
+export type ServiceName = 'inventory' | 'outbound' | 'general';
 
 interface SloObjective {
   id: ServiceName | string;
@@ -17,7 +17,7 @@ interface SloObjective {
   description?: string;
 }
 
-interface AlertRule {
+export interface AlertRule {
   id: string;
   slo: string;
   severity: 'critical' | 'warning';
@@ -42,7 +42,7 @@ interface SloWindowState {
   lastUpdated?: string;
 }
 
-interface SloStatus {
+export interface SloStatus {
   id: string;
   service: ServiceName;
   description?: string;
@@ -54,7 +54,7 @@ interface SloStatus {
   lastUpdated?: string;
 }
 
-interface ServiceSignal {
+export interface ServiceSignal {
   service: ServiceName;
   level: 'info' | 'warning' | 'error';
   message: string;
@@ -62,7 +62,7 @@ interface ServiceSignal {
   timestamp: string;
 }
 
-interface TraceSignal {
+export interface TraceSignal {
   service: ServiceName;
   span: string;
   status: 'ok' | 'degraded' | 'failed';
@@ -288,11 +288,8 @@ export class MonitoringService {
     const conditionMet =
       metricValue !== undefined &&
       thresholdValue !== undefined &&
-      parsed.comparator === '>'
-        ? metricValue > thresholdValue
-        : parsed.comparator === '<'
-        ? metricValue < thresholdValue
-        : false;
+      ((parsed.comparator === '>' && metricValue > thresholdValue) ||
+        (parsed.comparator === '<' && metricValue < thresholdValue));
 
     if (conditionMet) {
       const state = this.alertStates[rule.id] ?? {};

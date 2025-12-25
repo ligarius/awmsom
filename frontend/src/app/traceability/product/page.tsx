@@ -21,7 +21,7 @@ export default function TraceabilityProductPage() {
   const initialSku = searchParams.get("sku") ?? "";
   const [sku, setSku] = useState(initialSku);
   const [querySku, setQuerySku] = useState(initialSku);
-  const { allowed, initializing } = usePermissionGuard("TRACEABILITY_READ");
+  const { allowed, initializing } = usePermissionGuard("REPORTS:READ");
   const { get } = useApi();
 
   const { data, isLoading, isError, refetch } = useQuery({

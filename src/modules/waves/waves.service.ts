@@ -13,6 +13,8 @@ import { AuditService } from '../audit/audit.service';
 import { CacheService } from '../../common/cache/cache.service';
 import { GenerateWavesDto } from './dto/generate-waves.dto';
 
+type OutboundOrderWithLines = Prisma.OutboundOrderGetPayload<{ include: { lines: true } }>;
+
 interface WaveListFilters {
   warehouseId?: string;
   status?: string;
@@ -69,12 +71,12 @@ export class WavesService {
     if (dto.zoneCode) where.zoneCode = dto.zoneCode;
     if (dto.priorityMin !== undefined) where.priority = { gte: dto.priorityMin } as any;
 
-    const orders = await this.prisma.outboundOrder.findMany({
+    const orders = (await this.prisma.outboundOrder.findMany({
       where,
       include: { lines: true },
-    });
+    })) as OutboundOrderWithLines[];
 
-    const grouped = orders.reduce<Record<string, OutboundOrder[]>>((acc, order) => {
+    const grouped = orders.reduce<Record<string, OutboundOrderWithLines[]>>((acc, order) => {
       const key = this.buildGroupingKey(dto.strategy, order);
       acc[key] = acc[key] || [];
       acc[key].push(order);

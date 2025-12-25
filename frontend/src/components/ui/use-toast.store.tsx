@@ -1,15 +1,23 @@
+import type { ComponentPropsWithoutRef, ReactElement, ReactNode } from "react";
 import { create } from "zustand";
 import { nanoid } from "nanoid";
-import type { ToastProps } from "@radix-ui/react-toast";
-import { ToastProvider as Provider } from "@/components/ui/toast";
+import { Toast, ToastAction, ToastProvider as Provider } from "@/components/ui/toast";
 
-interface ToastItem extends ToastProps {
+export type ToastActionElement = ReactElement<typeof ToastAction>;
+export type ToastProps = ComponentPropsWithoutRef<typeof Toast>;
+export type ToastInput = ToastProps & {
+  title?: ReactNode;
+  description?: ReactNode;
+  action?: ToastActionElement;
+};
+
+interface ToastItem extends ToastInput {
   id: string;
 }
 
 interface ToastState {
   toasts: ToastItem[];
-  toast: (props: ToastProps) => void;
+  toast: (props: ToastInput) => void;
   dismiss: (id: string) => void;
 }
 
@@ -32,7 +40,7 @@ export function createToastStore() {
       }))
   }));
 
-  const ToastProvider = ({ children }: { children: React.ReactNode }) => (
+  const ToastProvider = ({ children }: { children: ReactNode }) => (
     <Provider swipeDirection="right">{children}</Provider>
   );
 

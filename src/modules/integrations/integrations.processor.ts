@@ -1,4 +1,4 @@
-import { Process, Processor } from '@nestjs/bullmq';
+import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { IntegrationJobStatus, IntegrationType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -7,16 +7,20 @@ import { ErpConnectorService } from '../integration/services/erp-connector.servi
 import { TmsConnectorService } from '../integration/services/tms-connector.service';
 
 @Processor('integration-jobs-queue')
-export class IntegrationsProcessor {
+export class IntegrationsProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly erpConnector: ErpConnectorService,
     private readonly tmsConnector: TmsConnectorService,
-  ) {}
+  ) {
+    super();
+  }
 
-  @Process('integration-job')
-  async handleIntegration(job: Job<{ tenantId: string; integrationJobId: string }>) {
+  async process(job: Job<{ tenantId: string; integrationJobId: string }>) {
+    if (job.name !== 'integration-job') {
+      return;
+    }
     const record = await this.prisma.integrationJob.findFirst({
       where: { id: job.data.integrationJobId, tenantId: job.data.tenantId },
       include: { integration: true },
@@ -45,7 +49,6 @@ export class IntegrationsProcessor {
 
       await this.audit.recordLog({
         tenantId: record.tenantId,
-        userId: null,
         resource: 'INTEGRATION_JOB',
         action: 'PROCESS',
         entityId: record.id,
@@ -63,7 +66,6 @@ export class IntegrationsProcessor {
       });
       await this.audit.recordLog({
         tenantId: record.tenantId,
-        userId: null,
         resource: 'INTEGRATION_JOB',
         action: 'PROCESS',
         entityId: record.id,

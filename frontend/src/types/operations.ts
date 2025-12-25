@@ -233,6 +233,17 @@ export interface Movement {
   user?: string;
   createdAt?: string;
   reason?: string;
+  reasonCode?: string;
+  notes?: string;
+}
+
+export interface MovementReasonConfig {
+  id: string;
+  code: string;
+  label: string;
+  description?: string | null;
+  isActive: boolean;
+  isDefault: boolean;
 }
 
 export type AdjustmentType = "AUMENTO" | "DISMINUCION";

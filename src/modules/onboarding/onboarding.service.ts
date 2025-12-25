@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PermissionAction, PermissionResource, PlanCode } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -6,9 +6,11 @@ import { ConfigService } from '../config/config.service';
 import { RbacService } from '../rbac/rbac.service';
 import { UserAccountService } from '../users/user-account.service';
 import { RegisterTenantDto } from './dto/register-tenant.dto';
+import { ROLE_OWNER, ROLE_PLATFORM_ADMIN, ROLE_TENANT_ADMIN, ROLE_TENANT_OPERATOR, ROLE_TENANT_SUPERVISOR } from '../../common/auth.constants';
 
 @Injectable()
 export class OnboardingService {
+  private readonly logger = new Logger(OnboardingService.name);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -44,29 +46,55 @@ export class OnboardingService {
     }
   }
 
-  private async ensureAdminRole(tenantId: string) {
-    const adminRole = await this.rbacService.createRole(
+  private async createFullAccessRole(tenantId: string, name: string, description: string) {
+    const role = await this.rbacService.createRole(
       tenantId,
-      { name: 'ADMIN', description: 'Full access', isSystem: true },
+      { name, description, isSystem: true },
     );
 
     await this.prisma.rolePermission.createMany({
       data: Object.values(PermissionResource).flatMap((resource) =>
         Object.values(PermissionAction).map((action) => ({
-          roleId: adminRole.id,
+          roleId: role.id,
           resource,
           action,
         })),
       ),
     });
 
+    return role;
+  }
+
+  private async ensureStandardRoles(tenantId: string, includePlatformRoles: boolean) {
+    const adminRole = await this.createFullAccessRole(
+      tenantId,
+      ROLE_TENANT_ADMIN,
+      'Full access for tenant admins',
+    );
+
+    let ownerRole;
+    let platformAdminRole;
+
+    if (includePlatformRoles) {
+      ownerRole = await this.createFullAccessRole(
+        tenantId,
+        ROLE_OWNER,
+        'Platform owner with global access',
+      );
+      platformAdminRole = await this.createFullAccessRole(
+        tenantId,
+        ROLE_PLATFORM_ADMIN,
+        'Platform administrator with global access',
+      );
+    }
+
     const supervisorRole = await this.rbacService.createRole(
       tenantId,
-      { name: 'SUPERVISOR', description: 'Supervises operations', isSystem: true },
+      { name: ROLE_TENANT_SUPERVISOR, description: 'Supervises operations', isSystem: true },
     );
     const operatorRole = await this.rbacService.createRole(
       tenantId,
-      { name: 'OPERATOR', description: 'Operates daily tasks', isSystem: true },
+      { name: ROLE_TENANT_OPERATOR, description: 'Operates daily tasks', isSystem: true },
     );
 
     await this.rbacService.setRolePermissions(tenantId, supervisorRole.id, {
@@ -99,7 +127,7 @@ export class OnboardingService {
       ],
     });
 
-    return adminRole;
+    return { adminRole, ownerRole, platformAdminRole };
   }
 
   async registerTenant(dto: RegisterTenantDto) {
@@ -107,6 +135,7 @@ export class OnboardingService {
       throw new BadRequestException('companyName, adminEmail and adminPassword are required');
     }
 
+    const isFirstTenant = (await this.prisma.tenant.count()) === 0;
     const planCode = dto.planCode ?? PlanCode.BASIC;
     const selectedPlan = await this.prisma.subscriptionPlan.findUnique({ where: { code: planCode } });
 
@@ -132,7 +161,8 @@ export class OnboardingService {
     });
 
     await this.configService.getTenantConfig(tenant.id);
-    const adminRole = await this.ensureAdminRole(tenant.id);
+    await this.configService.getMovementReasons(tenant.id);
+    const { adminRole, ownerRole } = await this.ensureStandardRoles(tenant.id, isFirstTenant);
 
     const adminUser = await this.userAccountService.createUser({
       email: dto.adminEmail,
@@ -141,7 +171,8 @@ export class OnboardingService {
       isActive: true,
     });
 
-    await this.rbacService.assignRoleToUser(tenant.id, { userId: adminUser.id, roleId: adminRole.id });
+    const roleToAssign = isFirstTenant && ownerRole ? ownerRole : adminRole;
+    await this.rbacService.assignRoleToUser(tenant.id, { userId: adminUser.id, roleId: roleToAssign.id });
 
     const warehouseCode = 'DEFAULT';
     await this.prisma.warehouse.create({
@@ -180,6 +211,8 @@ export class OnboardingService {
       userId: adminUser.id,
       metadata: { planCode, adminEmail: dto.adminEmail },
     });
+
+    this.logger.log(`Tenant registered: ${tenant.id} (${tenant.name})`);
 
     return {
       tenantId: tenant.id,

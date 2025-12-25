@@ -11,7 +11,7 @@ import { Type } from 'class-transformer';
 
 class ConfirmInboundReceiptLineDto {
   @IsUUID()
-  lineId: string;
+  lineId!: string;
 
   @Type(() => Number)
   @IsOptional()
@@ -29,7 +29,7 @@ class ConfirmInboundReceiptLineDto {
 
 export class ConfirmInboundReceiptDto {
   @IsUUID()
-  toLocationId: string;
+  toLocationId!: string;
 
   @IsOptional()
   @IsArray()

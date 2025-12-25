@@ -8,7 +8,8 @@ export class InventoryMovement {
     public readonly lotCode?: string,
     public readonly createdAt?: Date,
     public readonly createdBy?: string,
-    public readonly reason?: string,
+    public readonly reasonId?: string,
+    public readonly notes?: string,
     public readonly id?: string,
   ) {
     if (quantity <= 0) {
@@ -34,7 +35,8 @@ export class InventoryMovement {
       this.lotCode,
       date,
       this.createdBy,
-      this.reason,
+      this.reasonId,
+      this.notes,
       this.id,
     );
   }

@@ -2,6 +2,9 @@ import { Module } from '@nestjs/common';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { ConfigModule } from '../config/config.module';
 import { InventoryController } from './inventory.controller';
+import { MovementsController } from './movements.controller';
+import { AdjustmentsController } from './adjustments.controller';
+import { CycleCountController } from './cycle-count.controller';
 import { InventoryService } from './inventory.service';
 import { InventoryOptimizationService } from './inventory-optimization.service';
 import { BlockLotUseCase } from './application/use-cases/block-lot.use-case';
@@ -17,7 +20,7 @@ import { PrismaInventoryMovementRepository } from './infrastructure/persistence/
 
 @Module({
   imports: [PrismaModule, ConfigModule],
-  controllers: [InventoryController],
+  controllers: [InventoryController, MovementsController, AdjustmentsController, CycleCountController],
   providers: [
     InventoryService,
     InventoryOptimizationService,

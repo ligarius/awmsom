@@ -21,7 +21,7 @@ export default function TraceabilityBatchPage() {
   const initialBatch = searchParams.get("batch") ?? "";
   const [batch, setBatch] = useState(initialBatch);
   const [queryBatch, setQueryBatch] = useState(initialBatch);
-  const { allowed, initializing } = usePermissionGuard("TRACEABILITY_READ");
+  const { allowed, initializing } = usePermissionGuard("REPORTS:READ");
   const { get } = useApi();
 
   const { data, isLoading, isError } = useQuery({

@@ -6,6 +6,7 @@ import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { SetRolePermissionsDto } from './dto/set-role-permissions.dto';
+import { PLATFORM_ROLES } from '../../common/auth.constants';
 
 @Injectable()
 export class RbacService {
@@ -13,6 +14,9 @@ export class RbacService {
 
   private readonly excessivePermissionThreshold = Number(
     process.env.RBAC_EXCESSIVE_PERMISSION_THRESHOLD ?? 20,
+  );
+  private readonly fullPermissionSet = Object.values(PermissionResource).flatMap((resource) =>
+    Object.values(PermissionAction).map((action) => ({ resource, action })),
   );
 
   async createRole(tenantId: string, dto: CreateRoleDto, actorUserId?: string) {
@@ -175,6 +179,14 @@ export class RbacService {
       include: { role: { include: { permissions: true } } },
     });
 
+    const hasPlatformRole = assignments.some((assignment) =>
+      assignment.role?.name ? PLATFORM_ROLES.has(assignment.role.name) : false,
+    );
+
+    if (hasPlatformRole) {
+      return this.fullPermissionSet;
+    }
+
     const scopedAssignments = assignments.filter((assignment) => assignment.role?.tenantId === tenantId);
 
     const permissionsMap = new Map<string, { resource: PermissionResource; action: PermissionAction }>();
@@ -290,9 +302,9 @@ export class RbacService {
           rolesAnalyzed: roles.length,
           assignmentsReviewed: userPermissions.size,
           generatedAt: new Date().toISOString(),
-        } as Prisma.JsonValue,
-        orphaned: orphanedPermissions as Prisma.JsonValue,
-        excessive: excessiveAssignments as Prisma.JsonValue,
+        } as Prisma.InputJsonValue,
+        orphaned: orphanedPermissions as Prisma.InputJsonValue,
+        excessive: excessiveAssignments as Prisma.InputJsonValue,
         responsibleUserId: options.responsibleUserId,
         evidenceUrl: options.evidenceUrl,
       },

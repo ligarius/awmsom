@@ -20,7 +20,6 @@ export class KpisController {
     const tenantId = this.tenantContext.getTenantId();
     await this.audit.recordLog({
       tenantId,
-      userId: null,
       resource: 'KPIS',
       action: 'QUERY',
       metadata: { filters: query },

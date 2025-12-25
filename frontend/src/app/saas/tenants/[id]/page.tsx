@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { AppShell } from "@/components/layout/AppShell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useApi } from "@/hooks/useApi";
@@ -12,6 +11,8 @@ import { TenantPlanCard } from "@/components/TenantPlanCard";
 import { UserStatusBadge } from "@/components/UserStatusBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { toast } from "@/components/ui/use-toast";
+import { TenantShell } from "@/components/saas/TenantShell";
+import { LoadingState } from "@/components/layout/LoadingState";
 
 export default function TenantDetailPage() {
   const params = useParams();
@@ -43,25 +44,34 @@ export default function TenantDetailPage() {
     load();
   };
 
-  if (!tenant) return null;
+  if (!tenant) {
+    return (
+      <TenantShell tenantId={String(params.id)} title="Tenant" description="Cargando informacion del tenant.">
+        <LoadingState message="Cargando tenant..." />
+      </TenantShell>
+    );
+  }
 
   return (
-    <AppShell>
-      <div className="flex items-center justify-between pb-4">
-        <div>
-          <h1 className="text-2xl font-semibold">{tenant.name}</h1>
-          <p className="text-sm text-muted-foreground">Detalle completo del tenant.</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => router.push(`/saas/tenants/${tenant.id}/edit`)}>
+    <TenantShell
+      tenantId={tenant.id}
+      title={tenant.name}
+      description="Detalle completo del tenant."
+      actions={
+        <>
+          <Button variant="outline" size="sm" onClick={() => router.push(`/saas/tenants/${tenant.id}/edit`)}>
             Editar
           </Button>
-          <Button variant={tenant.status === "ACTIVE" ? "destructive" : "default"} onClick={() => setDialogOpen(true)}>
+          <Button
+            size="sm"
+            variant={tenant.status === "ACTIVE" ? "destructive" : "default"}
+            onClick={() => setDialogOpen(true)}
+          >
             {tenant.status === "ACTIVE" ? "Suspender" : "Activar"}
           </Button>
-        </div>
-      </div>
-
+        </>
+      }
+    >
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
@@ -72,7 +82,7 @@ export default function TenantDetailPage() {
             <DetailPanel
               title="Datos base"
               entries={[
-                { label: "Tax ID", value: tenant.taxId },
+                { label: "Tax ID", value: tenant.taxId || "—" },
                 { label: "Email", value: tenant.email },
                 { label: "Estado", value: <UserStatusBadge status={tenant.status === "ACTIVE" ? "ACTIVE" : "SUSPENDED"} /> },
                 { label: "Creado", value: new Date(tenant.createdAt).toLocaleString() }
@@ -116,6 +126,6 @@ export default function TenantDetailPage() {
         onConfirm={toggleStatus}
         confirmLabel={tenant.status === "ACTIVE" ? "Suspender" : "Activar"}
       />
-    </AppShell>
+    </TenantShell>
   );
 }

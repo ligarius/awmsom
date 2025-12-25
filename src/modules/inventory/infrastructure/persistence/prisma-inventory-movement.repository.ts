@@ -3,12 +3,17 @@ import { MovementStatus, MovementType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../../../prisma/prisma.service';
 import { InventoryMovement } from '../../domain/entities/inventory-movement.entity';
 import { INVENTORY_MOVEMENT_REPOSITORY, InventoryMovementRepository } from '../../domain/repositories/inventory-movement.repository';
+import { TenantContextService } from '../../../../common/tenant-context.service';
 
 @Injectable()
 export class PrismaInventoryMovementRepository implements InventoryMovementRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly tenantContext: TenantContextService,
+  ) {}
 
   async log(movement: InventoryMovement): Promise<InventoryMovement> {
+    const tenantId = this.tenantContext.getTenantId();
     const fromLocation = await this.prisma.location.findUnique({ where: { id: movement.fromLocationId } });
     if (!fromLocation) {
       throw new NotFoundException('Origen de inventario no encontrado');
@@ -20,12 +25,16 @@ export class PrismaInventoryMovementRepository implements InventoryMovementRepos
 
     const header = await this.prisma.movementHeader.create({
       data: {
+        tenantId,
         movementType: MovementType.INTERNAL_TRANSFER,
         warehouseId: fromLocation.warehouseId,
         status: MovementStatus.COMPLETED,
         createdBy: movement.createdBy,
+        reasonId: movement.reasonId,
+        notes: movement.notes ?? null,
         lines: {
           create: {
+            tenantId,
             productId: movement.productId,
             batchId,
             fromLocationId: movement.fromLocationId,
@@ -49,13 +58,15 @@ export class PrismaInventoryMovementRepository implements InventoryMovementRepos
       movement.lotCode,
       header.createdAt,
       movement.createdBy,
-      movement.reason,
+      movement.reasonId,
+      movement.notes,
       line.id,
     );
   }
 
   private async getBatchId(productId: string, batchCode: string): Promise<string | null> {
-    const batch = await this.prisma.batch.findFirst({ where: { productId, batchCode } });
+    const tenantId = this.tenantContext.getTenantId();
+    const batch = await this.prisma.batch.findFirst({ where: { productId, batchCode, tenantId } });
     if (!batch) {
       throw new NotFoundException('Lote no encontrado para el movimiento');
     }

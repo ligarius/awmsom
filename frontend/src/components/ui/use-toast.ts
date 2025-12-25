@@ -1,9 +1,9 @@
-import { ToastActionElement, type ToastProps } from "@radix-ui/react-toast";
+import type { ToastActionElement, ToastInput } from "@/components/ui/use-toast.store";
 import { createToastStore } from "@/components/ui/use-toast.store";
 
 const { ToastProvider, useToastStore } = createToastStore();
 
-const toast = (props: ToastProps) => useToastStore.getState().toast(props);
+const toast = (props: ToastInput) => useToastStore.getState().toast(props);
 
 const useToast = () => {
   const state = useToastStore();
@@ -13,4 +13,5 @@ const useToast = () => {
   };
 };
 
-export { ToastProvider, toast, useToast, ToastActionElement };
+export { ToastProvider, toast, useToast };
+export type { ToastActionElement, ToastInput };

@@ -10,14 +10,12 @@ import { toast } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
 
 export default function LoginPage() {
-  const { login, submitMfaCode, mfaChallenge, mfaRequired, mfaCode, setMfaCode, startOAuth } = useAuthContext();
+  const { login, submitMfaCode, mfaChallenge, mfaRequired, mfaCode, setMfaCode } = useAuthContext();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [tenantId, setTenantId] = useState("");
   const [challengeId, setChallengeId] = useState("");
   const [factorId, setFactorId] = useState("");
   const [loading, setLoading] = useState(false);
-  const [oauthLoading, setOauthLoading] = useState(false);
 
   const isMfaStep = useMemo(() => Boolean(mfaChallenge || mfaRequired), [mfaChallenge, mfaRequired]);
 
@@ -45,7 +43,6 @@ export default function LoginPage() {
       const response = await login({
         email,
         password,
-        tenantId,
         factorId: factorId || undefined
       });
 
@@ -64,31 +61,6 @@ export default function LoginPage() {
       });
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleOAuthLogin = async () => {
-    if (!tenantId) {
-      toast({
-        title: "Tenant requerido",
-        description: "Ingresa el tenant para redirigir al proveedor OAuth",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setOauthLoading(true);
-    try {
-      const redirectUrl = await startOAuth({ provider: "oidc-demo", tenantId });
-      window.location.assign(redirectUrl);
-    } catch (error) {
-      toast({
-        title: "No pudimos iniciar sesión con OAuth",
-        description: (error as Error).message,
-        variant: "destructive"
-      });
-    } finally {
-      setOauthLoading(false);
     }
   };
 
@@ -114,17 +86,6 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="usuario@awms.com"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="tenantId">Tenant</Label>
-              <Input
-                id="tenantId"
-                type="text"
-                required
-                value={tenantId}
-                onChange={(e) => setTenantId(e.target.value)}
-                placeholder="ID del tenant"
               />
             </div>
             <div className="space-y-2">
@@ -181,19 +142,9 @@ export default function LoginPage() {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Ingresar"}
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              disabled={oauthLoading}
-              onClick={handleOAuthLogin}
-            >
-              {oauthLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Continuar con OAuth2"}
-            </Button>
             <p className="text-xs text-muted-foreground">
-              Flujo seguro: completa email, contraseña y tenant, luego verifica el código MFA si tu factor está activo. También
-              puedes acceder con OAuth2 (OIDC) usando tu tenant antes de redirigir al proveedor. Conservamos el JWT en cookie
-              HttpOnly y memoria para seguir las guías de seguridad del sprint.
+              Flujo seguro: completa email y contraseña, luego verifica el código MFA si tu factor está activo. Conservamos el
+              JWT en cookie HttpOnly y memoria para seguir las guías de seguridad del sprint.
             </p>
           </form>
         </CardContent>

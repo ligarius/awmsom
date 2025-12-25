@@ -3,17 +3,17 @@ import { IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class CreateInventoryAdjustmentDto {
   @IsUUID()
-  warehouseId: string;
+  warehouseId!: string;
 
   @IsUUID()
-  productId: string;
+  productId!: string;
 
   @IsOptional()
   @IsUUID()
   batchId?: string;
 
   @IsUUID()
-  locationId: string;
+  locationId!: string;
 
   @IsOptional()
   @IsString()
@@ -21,10 +21,10 @@ export class CreateInventoryAdjustmentDto {
 
   @Type(() => Number)
   @IsNumber()
-  newQty: number;
+  newQty!: number;
 
   @IsString()
-  reason: string;
+  reason!: string;
 
   @IsOptional()
   @IsString()

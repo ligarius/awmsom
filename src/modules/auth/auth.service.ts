@@ -3,12 +3,14 @@ import {
   ForbiddenException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UserAccountService } from '../users/user-account.service';
 import { RbacService } from '../rbac/rbac.service';
+import { PLATFORM_ROLES } from '../../common/auth.constants';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { UpdateCredentialsDto } from './dto/update-credentials.dto';
@@ -21,6 +23,8 @@ import * as crypto from 'crypto';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly rbacService: RbacService = {
@@ -229,17 +233,22 @@ export class AuthService {
       : [];
     const permissions = await this.rbacService.getUserPermissions(user.tenantId, user.id);
 
-    const roles = roleAssignments.map((assignment: any) => assignment.role?.name ?? assignment.roleId);
+    const roles = roleAssignments
+      .map((assignment: any) => assignment.role?.name ?? assignment.roleId)
+      .filter((role: string | undefined | null) => Boolean(role)) as string[];
     const permissionList = permissions.map((permission: any) =>
       typeof permission === 'string' ? permission : `${permission.resource}:${permission.action}`,
     );
 
-    const payload = {
+    const isPlatform = roles.some((role) => PLATFORM_ROLES.has(role));
+    const payload: { sub: string; tenantId: string; roles: string[]; permissions?: string[] } = {
       sub: user.id,
       tenantId: user.tenantId,
       roles,
-      permissions: permissionList,
     };
+    if (!isPlatform) {
+      payload.permissions = permissionList;
+    }
 
     const token = jwt.sign(payload, this.jwtSecret, { expiresIn: '1h' });
     return {
@@ -296,7 +305,9 @@ export class AuthService {
       : [];
     const permissions = await this.rbacService.getUserPermissions(user.tenantId, user.id);
 
-    const roles = roleAssignments.map((assignment: any) => assignment.role?.name ?? assignment.roleId);
+    const roles = roleAssignments
+      .map((assignment: any) => assignment.role?.name ?? assignment.roleId)
+      .filter((role: string | undefined | null) => Boolean(role)) as string[];
     const permissionList = permissions.map((permission: any) =>
       typeof permission === 'string' ? permission : `${permission.resource}:${permission.action}`,
     );
@@ -347,16 +358,67 @@ export class AuthService {
 
   async login(dto: LoginDto) {
     const prisma = this.prisma as any;
-    const tenant = await prisma.tenant.findUnique({ where: { id: dto.tenantId } });
-    if (!tenant) {
-      throw new UnauthorizedException('Tenant not found');
-    }
-    if (!tenant.isActive) {
-      throw new UnauthorizedException('Tenant inactive');
+    let user: any;
+    if (dto.tenantId) {
+      const tenant = await prisma.tenant.findUnique({ where: { id: dto.tenantId } });
+      if (!tenant) {
+        this.logger.warn(`Login failed: tenant ${dto.tenantId} not found for ${dto.email}`);
+        throw new UnauthorizedException('Tenant not found');
+      }
+      if (!tenant.isActive) {
+        this.logger.warn(`Login failed: tenant ${dto.tenantId} inactive for ${dto.email}`);
+        throw new UnauthorizedException('Tenant inactive');
+      }
+
+      user = await prisma.user.findFirst({
+        where: { tenantId: dto.tenantId, email: { equals: dto.email, mode: 'insensitive' } },
+      });
+    } else {
+      const matches = await prisma.user.findMany({
+        where: { email: { equals: dto.email, mode: 'insensitive' } },
+        take: 2,
+      });
+      if (matches.length === 0) {
+        this.logger.warn(`Login failed: no user found for ${dto.email}`);
+        throw new NotFoundException('User not found');
+      }
+      if (matches.length > 1) {
+        const prismaAny = prisma as any;
+        const assignments = prismaAny.userRole?.findMany
+          ? await prismaAny.userRole.findMany({
+              where: { userId: { in: matches.map((match: any) => match.id) } },
+              include: { role: true },
+            })
+          : [];
+        const platformUserIds = new Set(
+          assignments
+            .filter((assignment: any) => assignment.role?.name && PLATFORM_ROLES.has(assignment.role.name))
+            .map((assignment: any) => assignment.userId),
+        );
+        const platformMatches = matches.filter((match: { id: string }) => platformUserIds.has(match.id));
+
+        if (platformMatches.length === 1) {
+          user = platformMatches[0];
+        } else {
+          this.logger.warn(`Login failed: multiple tenants found for ${dto.email}`);
+          throw new BadRequestException('Multiple tenants found for this email');
+        }
+      } else {
+        user = matches[0];
+      }
+      const tenant = await prisma.tenant.findUnique({ where: { id: user.tenantId } });
+      if (!tenant) {
+        this.logger.warn(`Login failed: tenant ${user.tenantId} not found for ${dto.email}`);
+        throw new UnauthorizedException('Tenant not found');
+      }
+      if (!tenant.isActive) {
+        this.logger.warn(`Login failed: tenant ${user.tenantId} inactive for ${dto.email}`);
+        throw new UnauthorizedException('Tenant inactive');
+      }
     }
 
-    const user = await prisma.user.findFirst({ where: { tenantId: dto.tenantId, email: dto.email } });
     if (!user) {
+      this.logger.warn(`Login failed: user not found for ${dto.email}`);
       throw new NotFoundException('User not found');
     }
 
@@ -533,7 +595,8 @@ export class AuthService {
     try {
       url = new URL(authorizeBase);
     } catch (error) {
-      console.warn(`Invalid authorize URL for provider ${provider}:`, error?.message ?? error);
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`Invalid authorize URL for provider ${provider}:`, message);
       throw new BadRequestException('Invalid provider authorize URL');
     }
 

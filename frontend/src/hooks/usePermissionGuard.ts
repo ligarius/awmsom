@@ -3,6 +3,7 @@
 import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthContext } from "@/providers/AuthProvider";
+import { hasPermission } from "@/lib/auth";
 
 export function usePermissionGuard(required: string | string[]) {
   const router = useRouter();
@@ -10,9 +11,8 @@ export function usePermissionGuard(required: string | string[]) {
 
   const allowed = useMemo(() => {
     if (!user) return false;
-    const permissions = user.permissions ?? [];
     const requiredList = Array.isArray(required) ? required : [required];
-    return requiredList.every((permission) => permissions.includes(permission));
+    return requiredList.every((permission) => hasPermission(permission));
   }, [required, user]);
 
   useEffect(() => {

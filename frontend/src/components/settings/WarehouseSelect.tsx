@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useApi } from "@/hooks/useApi";
 import type { Warehouse } from "@/types/wms";
+import type { PaginatedResult } from "@/types/common";
 
 interface WarehouseSelectProps {
   value?: string;
@@ -17,8 +18,9 @@ export function WarehouseSelect({ value, onChange, placeholder = "Selecciona bod
   const [options, setOptions] = useState<Warehouse[]>([]);
 
   useEffect(() => {
-    get<Warehouse[]>("/warehouses")
-      .then((items) => {
+    get<Warehouse[] | PaginatedResult<Warehouse>>("/warehouses")
+      .then((response) => {
+        const items = Array.isArray(response) ? response : response?.data ?? [];
         setOptions(includeInactive ? items : items.filter((w) => w.isActive));
       })
       .catch(() => setOptions([]));

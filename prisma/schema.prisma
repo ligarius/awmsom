@@ -265,6 +265,7 @@ model Tenant {
   tenantConfigs         TenantConfig[]
   pickingMethodConfigs  PickingMethodConfig[]
   warehouseZoneConfigs  WarehouseZoneConfig[]
+  movementReasonConfigs MovementReasonConfig[]
   inventoryPolicies     InventoryPolicy[]
   outboundRules         OutboundRule[]
   roles                 Role[]
@@ -588,6 +589,21 @@ model Product {
   tenantId           String
   sku                String
   name               String
+  description        String?
+  brand              String?
+  category           String?
+  barcode            String?
+  weight             Decimal? @db.Decimal(20, 4)
+  length             Decimal? @db.Decimal(20, 4)
+  width              Decimal? @db.Decimal(20, 4)
+  height             Decimal? @db.Decimal(20, 4)
+  volume             Decimal? @db.Decimal(20, 4)
+  unitsPerCase       Int?
+  minStock           Decimal? @db.Decimal(20, 4)
+  maxStock           Decimal? @db.Decimal(20, 4)
+  reorderPoint       Decimal? @db.Decimal(20, 4)
+  safetyStock        Decimal? @db.Decimal(20, 4)
+  notes              String?
   requiresBatch      Boolean  @default(false)
   requiresExpiryDate Boolean  @default(false)
   defaultUom         String
@@ -724,6 +740,8 @@ model MovementHeader {
   movementType MovementType
   warehouseId  String
   reference    String?
+  reasonId     String?
+  notes        String?
   status       MovementStatus
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
@@ -731,6 +749,7 @@ model MovementHeader {
 
   tenant               Tenant                @relation(fields: [tenantId], references: [id])
   warehouse            Warehouse             @relation(fields: [warehouseId], references: [id])
+  reason               MovementReasonConfig? @relation(fields: [reasonId], references: [id])
   lines                MovementLine[]
   inventoryAdjustments InventoryAdjustment[]
 
@@ -891,14 +910,47 @@ model Customer {
   code       String
   name       String
   taxId      String?
+  contactName String?
+  email      String?
+  phone      String?
   address    String?
   city       String?
+  state      String?
   country    String?
+  postalCode String?
+  notes      String?
+  isActive   Boolean  @default(true)
 
   outboundOrders OutboundOrder[]
 
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  @@index([tenantId])
+  @@unique([tenantId, code])
+}
+
+model Supplier {
+  id          String   @id @default(uuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+
+  code        String
+  name        String
+  taxId       String?
+  contactName String?
+  email       String?
+  phone       String?
+  address     String?
+  city        String?
+  state       String?
+  country     String?
+  postalCode  String?
+  notes       String?
+  isActive    Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([tenantId])
   @@unique([tenantId, code])
@@ -1495,6 +1547,24 @@ model BillingEvent {
   createdAt DateTime @default(now())
 
   @@index([tenantId])
+}
+
+model MovementReasonConfig {
+  id          String   @id @default(uuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  code        String
+  label       String
+  description String?
+  isActive    Boolean  @default(true)
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  movementHeaders MovementHeader[]
+
+  @@index([tenantId])
+  @@unique([tenantId, code])
 }
 
 model SlottingConfig {

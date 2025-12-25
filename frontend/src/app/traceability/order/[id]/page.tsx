@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 export default function TraceabilityOrderPage() {
   const params = useParams<{ id: string }>();
   const orderId = params.id;
-  const { allowed, initializing } = usePermissionGuard("TRACEABILITY_READ");
+  const { allowed, initializing } = usePermissionGuard("REPORTS:READ");
   const { get } = useApi();
 
   const { data, isLoading, isError } = useQuery({

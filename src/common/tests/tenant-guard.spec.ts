@@ -55,7 +55,7 @@ describe('TenantGuard', () => {
 
     const token = jwt.sign({ sub: 'user-1', tenantId: 't1' }, jwtSecret);
 
-    const request = {
+    const request: { path: string; headers: { cookie: string }; cookies: Record<string, string>; user?: any } = {
       path: '/warehouses',
       headers: { cookie: `awms_token=${token}` },
       cookies: {},

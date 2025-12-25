@@ -10,5 +10,6 @@ import { PaginationService } from '../../common/pagination/pagination.service';
   imports: [PrismaModule, InventoryModule, ConfigModule],
   controllers: [InboundController],
   providers: [InboundService, PaginationService],
+  exports: [InboundService],
 })
 export class InboundModule {}

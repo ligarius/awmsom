@@ -24,6 +24,36 @@ export class InventoryController {
     return this.inventoryService.health();
   }
 
+  @Get()
+  @Permissions(PermissionResource.INVENTORY, PermissionAction.READ)
+  listInventory(@Query() query: Record<string, string>) {
+    return this.inventoryService.listInventorySummary(query);
+  }
+
+  @Get('by-location')
+  @Permissions(PermissionResource.INVENTORY, PermissionAction.READ)
+  listByLocation(@Query() query: Record<string, string>) {
+    return this.inventoryService.listInventoryByLocation(query);
+  }
+
+  @Get('by-batch')
+  @Permissions(PermissionResource.INVENTORY, PermissionAction.READ)
+  listByBatch(@Query() query: Record<string, string>) {
+    return this.inventoryService.listInventoryByBatch(query);
+  }
+
+  @Get('product/:productId')
+  @Permissions(PermissionResource.INVENTORY, PermissionAction.READ)
+  getProductInventory(@Param('productId', new ParseUUIDPipe()) productId: string) {
+    return this.inventoryService.getProductInventoryDetail(productId);
+  }
+
+  @Get('low-stock')
+  @Permissions(PermissionResource.INVENTORY, PermissionAction.READ)
+  listLowStock() {
+    return this.inventoryService.listLowStock();
+  }
+
   @Post('slotting/rules')
   @Permissions(PermissionResource.INVENTORY, PermissionAction.CONFIG)
   generateSlottingRules(@Body() dto: GenerateSlottingRuleDto) {

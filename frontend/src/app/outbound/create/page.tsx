@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { useApi } from "@/hooks/useApi";
 import { toast } from "@/components/ui/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
+import { WarehouseSelect } from "@/components/settings/WarehouseSelect";
+import { ProductSelect } from "@/components/settings/ProductSelect";
 
 interface OrderLineForm {
   productId: string;
@@ -96,7 +98,7 @@ export default function OutboundCreatePage() {
           </div>
           <div>
             <Label>Bodega</Label>
-            <Input value={warehouse} onChange={(e) => setWarehouse(e.target.value)} placeholder="Bodega" />
+            <WarehouseSelect value={warehouse} onChange={setWarehouse} />
           </div>
         </CardContent>
       </Card>
@@ -115,11 +117,16 @@ export default function OutboundCreatePage() {
           {lines.map((line, index) => (
             <div key={index} className="grid gap-3 rounded-lg border p-3 md:grid-cols-4">
               <div className="md:col-span-2">
-                <Label>ID de producto</Label>
-                <Input
+                <Label>Producto</Label>
+                <ProductSelect
                   value={line.productId}
-                  onChange={(e) => updateLine(index, "productId", e.target.value)}
-                  placeholder="Producto"
+                  onChange={(value) => updateLine(index, "productId", value)}
+                  onSelect={(product) => {
+                    if (product?.defaultUom) {
+                      updateLine(index, "uom", product.defaultUom);
+                    }
+                  }}
+                  placeholder="Selecciona producto"
                 />
               </div>
               <div>

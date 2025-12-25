@@ -1,13 +1,14 @@
 "use client";
 
-import { Menu, Sun, MoonStar, LogOut } from "lucide-react";
-import { usePathname } from "next/navigation";
+import { ArrowLeftCircle, Menu, Sun, MoonStar, LogOut } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { buildBreadcrumbs } from "@/lib/utils";
 import { useAuthContext } from "@/providers/AuthProvider";
 import { useUiStore } from "@/store/ui.store";
+import { canAccessSaas } from "@/lib/navigation";
 
 export function Navbar() {
   const pathname = usePathname();
@@ -15,6 +16,16 @@ export function Navbar() {
   const { user, logout } = useAuthContext();
   const { theme: uiTheme, setTheme: setUiTheme, toggleSidebar } = useUiStore();
   const { theme, setTheme } = useTheme();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const tenantId = searchParams.get("tenantId");
+  const isTenantView = Boolean(tenantId && canAccessSaas(user));
+  const clearTenantContext = () => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("awms_active_tenant");
+    }
+    router.push("/saas");
+  };
 
   return (
     <header className="flex h-16 items-center justify-between border-b bg-background px-4 shadow-sm">
@@ -60,6 +71,11 @@ export function Navbar() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>{user?.email}</DropdownMenuLabel>
+            {isTenantView ? (
+              <DropdownMenuItem onClick={clearTenantContext}>
+                <ArrowLeftCircle className="mr-2 h-4 w-4" /> Salir vista tenant
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuItem onClick={logout} className="text-destructive">
               <LogOut className="mr-2 h-4 w-4" /> Cerrar sesión
             </DropdownMenuItem>

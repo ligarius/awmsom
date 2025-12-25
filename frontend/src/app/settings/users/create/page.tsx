@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,19 +10,29 @@ import { Button } from "@/components/ui/button";
 import { FormSection } from "@/components/FormSection";
 import { useApi } from "@/hooks/useApi";
 import { toast } from "@/components/ui/use-toast";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function CreateUserPage() {
   const router = useRouter();
   const { post } = useApi();
-  const [form, setForm] = useState({ fullName: "", email: "", password: "", role: "USER" });
+  const searchParams = useSearchParams();
+  const tenantId = searchParams.get("tenantId");
+  const [form, setForm] = useState({
+    fullName: "",
+    email: "",
+    password: "",
+    role: tenantId ? "ADMIN" : "OPERATOR"
+  });
   const [loading, setLoading] = useState(false);
+  const roleOptions = ["ADMIN", "SUPERVISOR", "OPERATOR"];
 
   const onSubmit = async () => {
     setLoading(true);
     try {
-      await post("/users", form);
+      const endpoint = tenantId ? `/saas/tenants/${tenantId}/users` : "/users";
+      await post(endpoint, form);
       toast({ title: "Usuario creado" });
-      router.push("/settings/users");
+      router.push(tenantId ? `/saas/tenants/${tenantId}/users` : "/settings/users");
     } catch (error) {
       const message = error instanceof Error ? error.message : "No pudimos crear el usuario";
       toast({ title: "Error al crear el usuario", description: message, variant: "destructive" });
@@ -60,7 +70,18 @@ export default function CreateUserPage() {
               </div>
               <div>
                 <Label htmlFor="role">Rol</Label>
-                <Input id="role" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} />
+                <Select value={form.role} onValueChange={(value) => setForm({ ...form, role: value })}>
+                  <SelectTrigger id="role">
+                    <SelectValue placeholder="Selecciona un rol" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {roleOptions.map((role) => (
+                      <SelectItem key={role} value={role}>
+                        {role}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </FormSection>

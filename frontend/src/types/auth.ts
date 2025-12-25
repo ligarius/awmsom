@@ -1,7 +1,7 @@
 export interface AuthCredentials {
   email: string;
   password: string;
-  tenantId: string;
+  tenantId?: string;
   challengeId?: string;
   mfaCode?: string;
   factorId?: string;
@@ -29,6 +29,7 @@ export interface AuthUser {
   tenant?: string;
   tenantId?: string;
   role?: string;
+  roles?: string[];
   permissions?: string[];
 }
 

@@ -14,6 +14,7 @@ import Link from "next/link";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { toast } from "@/components/ui/use-toast";
 import { UserStatusBadge } from "@/components/UserStatusBadge";
+import { formatPlanLabel } from "@/lib/plans";
 
 export default function TenantListPage() {
   const router = useRouter();
@@ -56,13 +57,23 @@ export default function TenantListPage() {
         header: "Estado",
         cell: ({ row }) => <UserStatusBadge status={row.original.status === "ACTIVE" ? "ACTIVE" : "SUSPENDED"} />
       },
-      { accessorKey: "plan", header: "Plan" },
+      {
+        accessorKey: "plan",
+        header: "Plan",
+        cell: ({ getValue }) => <span>{formatPlanLabel(getValue<string>())}</span>
+      },
       { accessorKey: "createdAt", header: "Creado", cell: ({ getValue }) => new Date(getValue<string>()).toLocaleDateString() },
       {
         id: "actions",
         header: "Acciones",
         cell: ({ row }) => (
           <div className="flex gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/dashboard?tenantId=${row.original.id}`}>Entrar como admin</Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href={`/saas/tenants/${row.original.id}/processes`}>Operaciones</Link>
+            </Button>
             <Button variant="ghost" size="sm" asChild>
               <Link href={`/saas/tenants/${row.original.id}`}>Ver</Link>
             </Button>

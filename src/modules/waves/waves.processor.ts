@@ -1,14 +1,26 @@
-import { Process, Processor } from '@nestjs/bullmq';
+import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { WavesService } from './waves.service';
 import { WavePickingStrategy } from '@prisma/client';
 
 @Processor('waves-queue')
-export class WavesProcessor {
-  constructor(private readonly wavesService: WavesService) {}
+export class WavesProcessor extends WorkerHost {
+  constructor(private readonly wavesService: WavesService) {
+    super();
+  }
 
-  @Process('generate')
-  async handleGenerate(job: Job<{ tenantId: string; warehouseId: string; strategy: WavePickingStrategy; timeWindowFrom?: string; timeWindowTo?: string }>) {
+  async process(
+    job: Job<{
+      tenantId: string;
+      warehouseId: string;
+      strategy: WavePickingStrategy;
+      timeWindowFrom?: string;
+      timeWindowTo?: string;
+    }>,
+  ) {
+    if (job.name !== 'generate') {
+      return;
+    }
     if (!job.data?.tenantId) return;
     const { tenantId, ...payload } = job.data;
     await this.wavesService.generateWaves(tenantId, payload as any);

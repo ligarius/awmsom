@@ -6,6 +6,7 @@ import { UpsertPickingMethodConfigDto } from './dto/upsert-picking-method-config
 import { UpsertWarehouseZoneConfigDto } from './dto/upsert-warehouse-zone-config.dto';
 import { UpsertInventoryPolicyDto } from './dto/upsert-inventory-policy.dto';
 import { UpsertOutboundRuleDto } from './dto/upsert-outbound-rule.dto';
+import { UpsertMovementReasonDto } from './dto/upsert-movement-reason.dto';
 
 @Controller('config')
 export class ConfigController {
@@ -36,6 +37,18 @@ export class ConfigController {
   upsertPickingMethod(@Body() dto: UpsertPickingMethodConfigDto) {
     const tenantId = this.tenantContext.getTenantId();
     return this.configService.upsertPickingMethod(tenantId, dto);
+  }
+
+  @Get('movement-reasons')
+  getMovementReasons() {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.configService.getMovementReasons(tenantId);
+  }
+
+  @Put('movement-reasons')
+  upsertMovementReason(@Body() dto: UpsertMovementReasonDto) {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.configService.upsertMovementReason(tenantId, dto);
   }
 
   @Get('zones')
