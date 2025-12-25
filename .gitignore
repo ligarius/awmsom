@@ -6,3 +6,12 @@
 /.vscode
 /.idea
 /prisma/node_modules
+
+# env
+.env
+.env.*
+# node
+node_modules/
+# next build artifacts
+frontend/.next/
+frontend/out/
